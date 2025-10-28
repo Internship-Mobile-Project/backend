@@ -1,0 +1,47 @@
+# Bỏ qua file HELP.md mặc định của Spring Initializr
+HELP.md
+
+# --- Gradle ---
+# Bỏ qua thư mục cache của Gradle
+.gradle/
+# Bỏ qua thư mục build (chứa file .jar, .class)
+build/
+
+# --- IDE: IntelliJ IDEA ---
+# Bỏ qua thư mục cài đặt riêng của IntelliJ
+.idea/
+# Bỏ qua thư mục build mặc định của IntelliJ
+out/
+# Bỏ qua các file module của IntelliJ
+*.iml
+*.iws
+*.ipr
+
+# --- IDE: STS / Eclipse ---
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+# Bỏ qua thư mục build mặc định của Eclipse
+bin/
+
+# --- IDE: NetBeans ---
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# --- IDE: VS Code ---
+.vscode/
+
+# --- Các file hệ điều hành ---
+.DS_Store
+Thumbs.db
+
+# --- Các file log ---
+*.log
+*.log.*
