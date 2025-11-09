@@ -8,7 +8,8 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class RefreshRequest {
-    private String refreshToken;
+public class VerifyRequest {
+    private String email;
+    private String code;
 }
 

@@ -27,6 +27,7 @@ repositories {
 
 ext {
 	set('snippetsDir', file("build/generated-snippets"))
+	springAiVersion = "1.0.3"
 }
 
 dependencies {
@@ -41,6 +42,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	// JWT library
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+//	implementation 'org.springframework.ai:spring-ai-starter-vector-store-pgvector'
+//	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 	compileOnly 'org.projectlombok:lombok:1.18.32'
@@ -53,6 +56,15 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	runtimeOnly 'org.postgresql:postgresql'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// Redis support for rate limiter
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.ai:spring-ai-bom:$springAiVersion"
+	}
 }
 
 tasks.named('test') {

@@ -1,13 +1,16 @@
 package com.badminton.shop.ws_booking_sport.dto.request;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-@Setter
-@Getter
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class RegisterRequest {
+    private String name;
     private String email;
     private String password;
-    private Integer role; // 1=guest,2=owner,3=admin
+    private String verifyPassword;
 }
 
