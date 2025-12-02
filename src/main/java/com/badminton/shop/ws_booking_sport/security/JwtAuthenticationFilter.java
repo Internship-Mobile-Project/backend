@@ -1,8 +1,8 @@
-// ...existing code...
 package com.badminton.shop.ws_booking_sport.security;
 
 import com.badminton.shop.ws_booking_sport.core.repository.AccountRepository;
 import com.badminton.shop.ws_booking_sport.enums.Role;
+import com.badminton.shop.ws_booking_sport.model.core.Account;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -16,7 +16,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Collections;
+import java.util.Date;
+import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -35,8 +39,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     String email = jwtService.extractEmail(token);
                     Role role = jwtService.extractRole(token);
                     if (email != null && role != null) {
-                        var accountOpt = accountRepository.findByEmail(email);
+                        Optional<Account> accountOpt = accountRepository.findByEmail(email);
                         if (accountOpt.isPresent()) {
+                            Account account = accountOpt.get();
+
+                            // check logout timestamp: if token was issued before logoutAt, treat as invalid
+                            Date issued = jwtService.extractIssuedAt(token);
+                            if (issued != null && account.getLogoutAt() != null) {
+                                LocalDateTime issuedAt = LocalDateTime.ofInstant(issued.toInstant(), ZoneId.systemDefault());
+                                if (issuedAt.isBefore(account.getLogoutAt())) {
+                                    // token was issued before logout, do not authenticate
+                                    filterChain.doFilter(request, response);
+                                    return;
+                                }
+                            }
+
                             var authority = new SimpleGrantedAuthority("ROLE_" + role.name());
                             var auth = new UsernamePasswordAuthenticationToken(email, null, Collections.singletonList(authority));
                             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -52,4 +69,3 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 }
-

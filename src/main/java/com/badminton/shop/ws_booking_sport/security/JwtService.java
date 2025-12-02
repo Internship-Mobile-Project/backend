@@ -96,6 +96,12 @@ public class JwtService {
         }
     }
 
+    // new: expose issued-at timestamp for logout checks
+    public Date extractIssuedAt(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.getIssuedAt();
+    }
+
     public boolean isTokenValid(String token) {
         try {
             Claims claims = extractAllClaims(token);

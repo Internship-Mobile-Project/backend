@@ -27,4 +27,10 @@ public class Account {
     private User user;
 
     private LocalDateTime verifyCodeExpiry;
+
+    // timestamp after which tokens issued earlier should be treated as invalid (used for logout)
+    private LocalDateTime logoutAt;
+
+    // when true, user is allowed to reset password until this time (set after successful OTP verification)
+    private LocalDateTime passwordResetAllowedUntil;
 }

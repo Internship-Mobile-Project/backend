@@ -7,9 +7,15 @@ import com.badminton.shop.ws_booking_sport.dto.request.RefreshRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.AuthRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.VerifyRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.ResendVerifyRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.UpdateUserRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.ChangePasswordRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordResetRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.RegisterResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.RefreshResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.AuthResponse;
+import com.badminton.shop.ws_booking_sport.dto.response.MeResponse;
+import com.badminton.shop.ws_booking_sport.dto.response.UserPublicResponse;
 import com.badminton.shop.ws_booking_sport.enums.Role;
 import com.badminton.shop.ws_booking_sport.model.core.Account;
 import com.badminton.shop.ws_booking_sport.model.core.Customer;
@@ -17,11 +23,14 @@ import com.badminton.shop.ws_booking_sport.model.core.User;
 import com.badminton.shop.ws_booking_sport.model.core.Owner;
 import com.badminton.shop.ws_booking_sport.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.Random;
 
 @Service
@@ -160,9 +169,9 @@ public class UserService {
             throw new IllegalArgumentException("Invalid refresh token claims");
         }
 
-        Integer userId;
+        int userId;
         try {
-            userId = Integer.valueOf(subject);
+            userId = Integer.parseInt(subject);
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException("Invalid user id in token");
         }
@@ -272,5 +281,313 @@ public class UserService {
         String refreshToken = jwtService.generateRefreshToken(user, email, role);
 
         return new RegisterResponse(user.getId(), user.getName(), email, accessToken, refreshToken, role);
+    }
+
+    // new: logout method - accepts an Authorization header (Bearer token) and sets account.logoutAt
+    public void logout(String authorizationHeader) {
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        if (!authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        String email = jwtService.extractEmail(token);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Token does not contain email");
+        }
+
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        account.setLogoutAt(LocalDateTime.now());
+        accountRepository.save(account);
+    }
+
+    // new: return current authenticated user's details
+    public MeResponse me(String authorizationHeader) {
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        if (!authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        String email = jwtService.extractEmail(token);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Token does not contain email");
+        }
+
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        // check logout timestamp
+        Date issued = jwtService.extractIssuedAt(token);
+        if (issued != null && account.getLogoutAt() != null) {
+            LocalDateTime issuedAt = LocalDateTime.ofInstant(issued.toInstant(), ZoneId.systemDefault());
+            if (issuedAt.isBefore(account.getLogoutAt())) {
+                throw new IllegalArgumentException("Token has been invalidated (user logged out)");
+            }
+        }
+
+        User user = account.getUser();
+        if (user == null) {
+            throw new IllegalArgumentException("Associated user not found");
+        }
+
+        MeResponse resp = new MeResponse();
+        resp.setId(user.getId());
+        resp.setName(user.getName());
+        resp.setEmail(account.getEmail());
+        resp.setPhone(user.getPhone());
+        resp.setAvatarUrl(user.getAvatarUrl());
+        resp.setBackgroundUrl(user.getBackgroundUrl());
+        resp.setActive(user.isActive());
+        resp.setAddress(user.getAddress());
+        resp.setRole(account.getRole());
+        resp.setVerified(account.isVerified());
+        resp.setLastLogin(account.getLastLogin());
+        resp.setCreatedAt(user.getCreatedAt());
+        resp.setUpdatedAt(user.getUpdatedAt());
+
+        return resp;
+    }
+
+    // new: public method to get public profile by userId (moved from controller)
+    public UserPublicResponse getPublicUser(Integer userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Float rating = null;
+        if (user instanceof Owner) {
+            rating = ((Owner) user).getRating();
+        }
+
+        return new UserPublicResponse(
+                user.getId(),
+                user.getName(),
+                user.getAvatarUrl(),
+                user.getBackgroundUrl(),
+                user.isActive(),
+                user.getAddress(),
+                rating,
+                user.getCreatedAt(),
+                user.getUpdatedAt()
+        );
+    }
+
+    // new: update user profile (only the owner can update their profile)
+    @Transactional
+    public MeResponse updateUser(Integer userId, String authorizationHeader, UpdateUserRequest req) {
+        if (req == null) throw new IllegalArgumentException("Request body is required");
+
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        if (!authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        String email = jwtService.extractEmail(token);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Token does not contain email");
+        }
+
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        // check logout timestamp
+        Date issued = jwtService.extractIssuedAt(token);
+        if (issued != null && account.getLogoutAt() != null) {
+            LocalDateTime issuedAt = LocalDateTime.ofInstant(issued.toInstant(), ZoneId.systemDefault());
+            if (issuedAt.isBefore(account.getLogoutAt())) {
+                throw new IllegalArgumentException("Token has been invalidated (user logged out)");
+            }
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        // Only allow the owner of the account (account.user.id) to update their profile
+        if (account.getUser() == null || !account.getUser().getId().equals(user.getId())) {
+            throw new AccessDeniedException("You are not allowed to update this user");
+        }
+
+        // apply non-null fields from request
+        if (req.getName() != null) user.setName(req.getName());
+        if (req.getPhone() != null) user.setPhone(req.getPhone());
+        if (req.getAvatarUrl() != null) user.setAvatarUrl(req.getAvatarUrl());
+        if (req.getBackgroundUrl() != null) user.setBackgroundUrl(req.getBackgroundUrl());
+        if (req.getAddress() != null) user.setAddress(req.getAddress());
+
+        user.setUpdatedAt(LocalDateTime.now());
+        user = userRepository.save(user);
+
+        // prepare MeResponse
+        MeResponse resp = new MeResponse();
+        resp.setId(user.getId());
+        resp.setName(user.getName());
+        resp.setEmail(account.getEmail());
+        resp.setPhone(user.getPhone());
+        resp.setAvatarUrl(user.getAvatarUrl());
+        resp.setBackgroundUrl(user.getBackgroundUrl());
+        resp.setActive(user.isActive());
+        resp.setAddress(user.getAddress());
+        resp.setRole(account.getRole());
+        resp.setVerified(account.isVerified());
+        resp.setLastLogin(account.getLastLogin());
+        resp.setCreatedAt(user.getCreatedAt());
+        resp.setUpdatedAt(user.getUpdatedAt());
+
+        return resp;
+    }
+
+    // new: change password
+    @Transactional
+    public String changePassword(String authorizationHeader, ChangePasswordRequest req) {
+        if (req == null) throw new IllegalArgumentException("Request body is required");
+        if (req.getOldPassword() == null || req.getOldPassword().isBlank()) throw new IllegalArgumentException("Old password is required");
+        if (req.getNewPassword() == null || req.getNewPassword().isBlank()) throw new IllegalArgumentException("New password is required");
+        if (req.getConfirmNewPassword() == null || req.getConfirmNewPassword().isBlank()) throw new IllegalArgumentException("Confirm new password is required");
+
+        if (!req.getNewPassword().equals(req.getConfirmNewPassword())) {
+            throw new IllegalArgumentException("New password and confirm password do not match");
+        }
+
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        if (!authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        String email = jwtService.extractEmail(token);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Token does not contain email");
+        }
+
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        // check logout timestamp
+        Date issued = jwtService.extractIssuedAt(token);
+        if (issued != null && account.getLogoutAt() != null) {
+            LocalDateTime issuedAt = LocalDateTime.ofInstant(issued.toInstant(), ZoneId.systemDefault());
+            if (issuedAt.isBefore(account.getLogoutAt())) {
+                throw new IllegalArgumentException("Token has been invalidated (user logged out)");
+            }
+        }
+
+        // verify old password
+        if (!passwordEncoder.matches(req.getOldPassword(), account.getPassword())) {
+            throw new IllegalArgumentException("Old password is incorrect");
+        }
+
+        // optional: prevent reusing same password
+        if (passwordEncoder.matches(req.getNewPassword(), account.getPassword())) {
+            throw new IllegalArgumentException("New password must be different from old password");
+        }
+
+        account.setPassword(passwordEncoder.encode(req.getNewPassword()));
+        accountRepository.save(account);
+
+        return "Changed password";
+    }
+
+    // Forgot-password: send OTP to email if account exists
+    public String forgotPassword(ForgotPasswordRequest req) {
+        String email = req.getEmail();
+        if (email == null || email.isBlank()) throw new IllegalArgumentException("Email is required");
+
+        var accountOpt = accountRepository.findByEmail(email);
+        if (accountOpt.isEmpty()) throw new IllegalArgumentException("Account not found");
+
+        // rate limit
+        if (!verificationRateLimiter.allow(email)) {
+            throw new IllegalArgumentException("Too many attempts. Please try again later.");
+        }
+
+        Account account = accountOpt.get();
+        String code = generateVerificationCode();
+        account.setVerifyCode(code);
+        account.setVerifyCodeExpiry(LocalDateTime.now().plusMinutes(VERIFY_CODE_EXPIRY_MINUTES));
+        accountRepository.save(account);
+
+        // send email (best-effort)
+        emailService.sendVerificationCode(email, code);
+
+        return "Verification code sent";
+    }
+
+    // Verify OTP for forgot-password and allow password reset for a short window
+    public String verifyForgotPassword(VerifyRequest req) {
+        String email = req.getEmail();
+        String code = req.getCode();
+        if (email == null || email.isBlank() || code == null || code.isBlank()) throw new IllegalArgumentException("Email and code are required");
+
+        Account account = accountRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        LocalDateTime expiry = account.getVerifyCodeExpiry();
+        if (expiry == null || expiry.isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Verification code expired. Please request a new code.");
+        }
+
+        if (!code.equals(account.getVerifyCode())) {
+            throw new IllegalArgumentException("Invalid verification code");
+        }
+
+        // allow reset for a short period
+        account.setPasswordResetAllowedUntil(LocalDateTime.now().plusMinutes(VERIFY_CODE_EXPIRY_MINUTES));
+        account.setVerifyCode(null);
+        account.setVerifyCodeExpiry(null);
+        accountRepository.save(account);
+
+        return "Verified";
+    }
+
+    // Reset password after successful OTP verification (no auth header required)
+    @Transactional
+    public String resetForgotPassword(ForgotPasswordResetRequest req) {
+        String email = req.getEmail();
+        String newPassword = req.getNewPassword();
+        String confirm = req.getConfirmNewPassword();
+        if (email == null || email.isBlank()) throw new IllegalArgumentException("Email is required");
+        if (newPassword == null || newPassword.isBlank()) throw new IllegalArgumentException("New password is required");
+        if (confirm == null || confirm.isBlank()) throw new IllegalArgumentException("Confirm new password is required");
+        if (!newPassword.equals(confirm)) throw new IllegalArgumentException("New password and confirm password do not match");
+
+        Account account = accountRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        LocalDateTime allowedUntil = account.getPasswordResetAllowedUntil();
+        if (allowedUntil == null || allowedUntil.isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Password reset not allowed or reset window expired. Please verify OTP first.");
+        }
+
+        // optional: prevent reusing same password
+        if (passwordEncoder.matches(newPassword, account.getPassword())) {
+            throw new IllegalArgumentException("New password must be different from old password");
+        }
+
+        account.setPassword(passwordEncoder.encode(newPassword));
+        account.setPasswordResetAllowedUntil(null);
+        accountRepository.save(account);
+
+        return "Password reset";
     }
 }

@@ -1,20 +1,20 @@
 package com.badminton.shop.ws_booking_sport.core.service;
 
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.TimeUnit;
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Component
 public class VerificationRateLimiter {
 
-    private final StringRedisTemplate redisTemplate;
+    private final ConcurrentMap<String, Attempt> store = new ConcurrentHashMap<>();
 
     private final int MAX_ATTEMPTS = 3; // max attempts
     private final int WINDOW_MINUTES = 60; // time window in minutes
 
-    public VerificationRateLimiter(StringRedisTemplate redisTemplate) {
-        this.redisTemplate = redisTemplate;
+    public VerificationRateLimiter() {
     }
 
     /**
@@ -23,19 +23,27 @@ public class VerificationRateLimiter {
     public boolean allow(String email) {
         if (email == null) return false;
         String key = makeKey(email);
-        Long count = redisTemplate.opsForValue().increment(key);
-        if (count == null) return false; // Redis issue
-        if (count == 1L) {
-            // set expiry for the key on first increment
-            redisTemplate.expire(key, WINDOW_MINUTES, TimeUnit.MINUTES);
-        }
-        return count <= MAX_ATTEMPTS;
+        long now = Instant.now().getEpochSecond();
+
+        store.compute(key, (k, cur) -> {
+            if (cur == null || cur.expiryEpochSec <= now) {
+                // start new window
+                return new Attempt(1, now + WINDOW_MINUTES * 60L);
+            } else {
+                // increment within window
+                cur.count++;
+                return cur;
+            }
+        });
+
+        Attempt a = store.get(key);
+        return a != null && a.count <= MAX_ATTEMPTS;
     }
 
     public void reset(String email) {
         if (email == null) return;
         String key = makeKey(email);
-        redisTemplate.delete(key);
+        store.remove(key);
     }
 
     private String makeKey(String email) {
@@ -44,5 +52,14 @@ public class VerificationRateLimiter {
         return "verify:attempts:" + safe;
     }
 
-}
+    private static class Attempt {
+        int count;
+        long expiryEpochSec;
 
+        Attempt(int count, long expiryEpochSec) {
+            this.count = count;
+            this.expiryEpochSec = expiryEpochSec;
+        }
+    }
+
+}
