@@ -18,21 +18,8 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build with Gradle
-        run: |
-          chmod +x gradlew
-          ./gradlew clean bootJar -x test
-
-      - name: Verify build outputs
-        run: |
-          echo "Workspace: $(pwd)"
-          ls -la
-          echo "build/libs:"
-          ls -la build/libs || true
-          if ! ls build/libs/*.jar 1> /dev/null 2>&1; then
-            echo "::error::No jar found in build/libs"
-            exit 1
-          fi
+      - name: Build JAR
+        run: ./gradlew build
 
       - name: Copy app to server
         uses: appleboy/scp-action@v0.1.4
