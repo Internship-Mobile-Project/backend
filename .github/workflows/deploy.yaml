@@ -44,14 +44,8 @@ jobs:
           script: |
             cd /home/${{ secrets.USERNAME }}/deploy
 
-            # build docker image mới
             docker build -t myapp:latest .
-
-            # stop container cũ nếu có
             docker stop my-website || true
             docker rm my-website || true
-
-            # run container mới, expose port 80 ra ngoài
             docker run -d --name my-website -p 80:8080 myapp:latest
-
             echo "Deploy done!"
