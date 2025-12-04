@@ -25,7 +25,7 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # Copy file jar từ stage build
-COPY --from=build /home/gradle/app/build/libs/*.jar app.jar
+COPY --from=build /app/build/libs/*.jar app.jar
 
 # Expose port trong container
 EXPOSE 8080
