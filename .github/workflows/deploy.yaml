@@ -37,16 +37,35 @@ jobs:
           echo "Found JAR: $JAR_PATH"
           echo "JAR_PATH=$JAR_PATH" >> $GITHUB_ENV
 
-      - name: Copy app to server
+      - name: Prepare deploy package
+        run: |
+          echo "Preparing deploy_package directory with the jar and Dockerfile"
+          rm -rf deploy_package || true
+          mkdir -p deploy_package
+          # Use the runtime environment variable $JAR_PATH (set via GITHUB_ENV in previous step)
+          echo "Copying jar from: $JAR_PATH"
+          cp "$JAR_PATH" deploy_package/ || (echo "Copy jar failed" && ls -la build/libs && exit 1)
+          cp Dockerfile deploy_package/ || (echo "Copy Dockerfile failed" && ls -la && exit 1)
+          echo "Package contents:" && ls -la deploy_package
+          echo "Creating tarball deploy_package.tar.gz"
+          tar -czf deploy_package.tar.gz -C deploy_package .
+          ls -la deploy_package.tar.gz
+
+      - name: Debug deploy package and tarball
+        run: |
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          echo "Listing workdir:" && ls -la
+          echo "Listing deploy_package content:" && ls -la deploy_package || true
+          echo "Listing tarball info:" && ls -la deploy_package.tar.gz || true
+          echo "Tarball content (first 20 entries):" && tar -tf deploy_package.tar.gz | head -n 20 || true
+
+      - name: Copy app to server (tarball)
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
-          # Use the exact JAR path found in the previous step to avoid empty tar archives
-          source: |
-            ${{ env.JAR_PATH }}
-            Dockerfile
+          source: deploy_package.tar.gz
           target: /home/${{ secrets.USERNAME }}/deploy
 
       - name: Deploy on server
@@ -57,6 +76,18 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd /home/${{ secrets.USERNAME }}/deploy
+
+            echo "Listing /home/${{ secrets.USERNAME }}/deploy before extraction:" && ls -la || true
+
+            if [ -f deploy_package.tar.gz ]; then
+              echo "Extracting deploy_package.tar.gz"
+              tar -xzf deploy_package.tar.gz -C . || (echo "Failed to extract tarball" && ls -la && exit 1)
+              echo "After extraction:" && ls -la
+            else
+              echo "Tarball not found on remote host"
+              ls -la
+              exit 1
+            fi
 
             docker stop my-website || true
             docker rm my-website || true
