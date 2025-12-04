@@ -1,51 +1,54 @@
-name: CI/CD - Deploy Spring Boot Docker (No Docker Hub)
+- name: Build with Gradle
+  run: |
+    chmod +x gradlew
+    ./gradlew clean bootJar -x test
 
-on:
-  push:
-    branches: ["main"]
+- name: Verify build outputs
+  run: |
+    echo "Workspace: $(pwd)"
+    echo "Top-level files:"
+    ls -la || true
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+    echo "build/libs contents:"
+    ls -la build/libs || true
 
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v3
+    echo "Dockerfile present?"
+    ls -la Dockerfile || true
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v3
-        with:
-          java-version: '21'
-          distribution: 'temurin'
+    if ! ls build/libs/*.jar 1> /dev/null 2>&1; then
+      echo "::error::No jar found in build/libs. Check Gradle tasks or build logs."
+      exit 1
+    fi
 
-      - name: Build with Gradle
-        run: |
-          chmod +x gradlew
-          ./gradlew clean build -x test
+- name: Copy app to server
+  uses: appleboy/scp-action@v0.1.4
+  with:
+    host: ${{ secrets.HOST }}
+    username: ${{ secrets.USERNAME }}
+    key: ${{ secrets.SSH_KEY }}
+    source: |
+      build/libs/*.jar
+      Dockerfile
+    target: /home/${{ secrets.USERNAME }}/deploy
+    strip_components: 0
 
-      # Copy jar + Dockerfile lên server
-      - name: Copy app to server
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          source: |
-            "/build/libs/*.jar"
-            Dockerfile
-          target: /home/${{ secrets.USERNAME }}/deploy
+- name: Deploy on server
+  uses: appleboy/ssh-action@v0.1.8
+  with:
+    host: ${{ secrets.HOST }}
+    username: ${{ secrets.USERNAME }}
+    key: ${{ secrets.SSH_KEY }}
+    script: |
+      cd /home/${{ secrets.USERNAME }}/deploy
 
-      - name: Deploy on server
-        uses: appleboy/ssh-action@v0.1.8
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            cd /home/${{ secrets.USERNAME }}/deploy
+      echo "Stop old container (if exists)"
+      docker stop my-website || true
+      docker rm my-website || true
 
-            docker build -t myapp:latest .
-            docker stop my-website || true
-            docker rm my-website || true
-            docker run -d --name my-website -p 80:8080 myapp:latest
-            echo "Deploy done!"
+      echo "Build Docker image"
+      docker build -t myapp:latest .
+
+      echo "Run new container"
+      docker run -d --name my-website -p 80:8080 myapp:latest
+
+      echo "Deploy done!"
