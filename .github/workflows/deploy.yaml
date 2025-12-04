@@ -47,30 +47,11 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            cd /home/${{ secrets.USERNAME }}/deploy
-
-            echo "=== BEFORE EXTRACTION ==="
-            ls -la
-
-            if [ -f deploy_package.tar.gz ]; then
-              echo "Extracting deploy_package.tar.gz"
-              tar -xzf deploy_package.tar.gz -C . || exit 1
-            else
-              echo "deploy_package.tar.gz NOT FOUND"
-              exit 1
-            fi
-
-            echo "=== AFTER EXTRACTION ==="
-            ls -la
-
-            echo "Stopping old container..."
+           
             docker stop my-website || true
             docker rm my-website || true
 
-            echo "Building Docker image..."
             docker build -t myapp:latest .
-
-            echo "Running new container..."
             docker run -d --name my-website -p 80:8080 myapp:latest
 
             echo "Deploy done!"
