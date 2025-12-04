@@ -24,14 +24,28 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build -x test
 
+      - name: Verify build artifacts
+        run: |
+          echo "Listing build/libs to ensure JAR exists"
+          ls -la build/libs || true
+          # Fail if no jar is found and print helpful message
+          JAR_PATH="$(ls build/libs/*.jar 2>/dev/null | head -n1 || true)"
+          if [ -z "$JAR_PATH" ]; then
+            echo "ERROR: No JAR produced in build/libs. Check the Gradle build output above."
+            exit 1
+          fi
+          echo "Found JAR: $JAR_PATH"
+          echo "JAR_PATH=$JAR_PATH" >> $GITHUB_ENV
+
       - name: Copy app to server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          # Use the exact JAR path found in the previous step to avoid empty tar archives
           source: |
-            build/libs/*.jar
+            ${{ env.JAR_PATH }}
             Dockerfile
           target: /home/${{ secrets.USERNAME }}/deploy
 
