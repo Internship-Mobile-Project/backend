@@ -1,14 +1,7 @@
 package com.badminton.shop.ws_booking_sport.core.controller;
 
 import com.badminton.shop.ws_booking_sport.core.service.UserService;
-import com.badminton.shop.ws_booking_sport.dto.request.RegisterRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.RefreshRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.AuthRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.VerifyRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ResendVerifyRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ChangePasswordRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordResetRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.*;
 import com.badminton.shop.ws_booking_sport.dto.response.RegisterResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.RefreshResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.AuthResponse;
@@ -19,6 +12,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+
+import java.io.IOException;
+import java.security.GeneralSecurityException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -47,6 +43,26 @@ public class AuthController {
         DataResponse body = DataResponse.success(resp, "Login successful", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
+    @PostMapping("/google-login")
+        public ResponseEntity<?> googleLogin(@RequestBody GoogleLoginRequest request) {
+            try {
+                // Gọi service xử lý
+                AuthResponse response = userService.authenticateGoogle(request.getIdToken());
+                return ResponseEntity.ok(response);
+
+            } catch (IllegalArgumentException e) {
+                // Lỗi do token không hợp lệ (trả về 401)
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+
+            } catch (GeneralSecurityException | IOException e) {
+                // Lỗi kỹ thuật khi verify với Google (trả về 500)
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to verify Google ID token");
+
+            } catch (Exception e) {
+                // Các lỗi khác
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Authentication error");
+            }
+        }
 
     @PostMapping("/refresh")
     public ResponseEntity<DataResponse> refresh(@RequestBody RefreshRequest req) {
