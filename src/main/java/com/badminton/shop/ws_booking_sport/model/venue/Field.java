@@ -15,7 +15,6 @@ public class Field {
 
     private String name;
     private String type;
-    private double price;
 
     @ManyToOne
     private Venue venue;
