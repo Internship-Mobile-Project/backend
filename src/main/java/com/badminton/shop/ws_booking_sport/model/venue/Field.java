@@ -20,8 +20,5 @@ public class Field {
     private Venue venue;
 
     @OneToMany(mappedBy = "field", cascade = CascadeType.ALL)
-    private List<AvailabilitySlot> slots;
-
-    @OneToMany(mappedBy = "field", cascade = CascadeType.ALL)
     private List<PriceRule> priceRules;
 }

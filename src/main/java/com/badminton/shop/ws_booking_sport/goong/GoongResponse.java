@@ -25,7 +25,8 @@ public class GoongResponse {
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Location {
-        private float lat;
-        private float lng;
+        // Use double for higher precision
+        private double lat;
+        private double lng;
     }
 }

@@ -4,17 +4,27 @@ import com.badminton.shop.ws_booking_sport.core.repository.AccountRepository;
 import com.badminton.shop.ws_booking_sport.dto.request.AddVenueRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.AddressRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.UpdateVenueRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.CreateFieldRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.VenueResponse;
+import com.badminton.shop.ws_booking_sport.dto.response.FieldResponse;
 import com.badminton.shop.ws_booking_sport.goong.GoongMapService;
 import com.badminton.shop.ws_booking_sport.goong.GoongResponse;
 import com.badminton.shop.ws_booking_sport.model.core.Account;
 import com.badminton.shop.ws_booking_sport.model.core.Address;
 import com.badminton.shop.ws_booking_sport.model.core.Owner;
 import com.badminton.shop.ws_booking_sport.model.venue.Venue;
+import com.badminton.shop.ws_booking_sport.model.venue.Field;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueRepository;
+import com.badminton.shop.ws_booking_sport.venue.repository.FieldRepository;
 import com.badminton.shop.ws_booking_sport.security.JwtService;
 import com.badminton.shop.ws_booking_sport.enums.Role;
+import com.badminton.shop.ws_booking_sport.booking.repository.ReviewRepository;
+import com.badminton.shop.ws_booking_sport.dto.response.ReviewResponse;
+import com.badminton.shop.ws_booking_sport.model.booking.Review;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.AccessDeniedException;
@@ -28,9 +38,11 @@ import java.util.stream.Collectors;
 public class VenueService {
 
     private final VenueRepository venueRepository;
+    private final FieldRepository fieldRepository;
     private final JwtService jwtService;
     private final AccountRepository accountRepository;
     private final GoongMapService goongMapService;
+    private final ReviewRepository reviewRepository;
 
     private Account validateOwner(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
@@ -97,6 +109,39 @@ public class VenueService {
 
         Venue saved = venueRepository.save(v);
         return toResponse(saved);
+    }
+
+    // New: add list of fields to a venue (batch)
+    @Transactional
+    public List<FieldResponse> addFields(Integer venueId, List<CreateFieldRequest> reqs, String authorizationHeader) {
+        if (reqs == null || reqs.isEmpty()) throw new IllegalArgumentException("Request list is empty");
+        Account account = validateOwner(authorizationHeader);
+        Venue v = venueRepository.findById(venueId).orElseThrow(() -> new IllegalArgumentException("Venue not found"));
+
+        if (account.getRole() != Role.ADMIN) {
+            if (v.getOwner() == null || !v.getOwner().getId().equals(account.getUser().getId())) {
+                throw new AccessDeniedException("You are not allowed to add fields to this venue");
+            }
+        }
+
+        List<Field> fields = reqs.stream().map(r -> {
+            Field f = new Field();
+            f.setName(r.getName());
+            f.setType(r.getType());
+            f.setVenue(v);
+            return f;
+        }).collect(Collectors.toList());
+
+        List<Field> saved = fieldRepository.saveAll(fields);
+
+        return saved.stream().map(f -> {
+            FieldResponse fr = new FieldResponse();
+            fr.setId(f.getId());
+            fr.setName(f.getName());
+            fr.setType(f.getType());
+            fr.setVenueId(v.getId());
+            return fr;
+        }).collect(Collectors.toList());
     }
 
     public VenueResponse getVenue(Integer id) {
@@ -205,6 +250,34 @@ public class VenueService {
         Venue v = venueRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Venue not found"));
         List<String> imgs = v.getImageUrls();
         return imgs == null ? java.util.Collections.emptyList() : imgs;
+    }
+
+    // new: get latest 5 reviews for a venue
+    public List<ReviewResponse> getLatestReviews(Integer venueId) {
+        List<Review> reviews = reviewRepository.findTop5ByBookingFieldVenueIdOrderByCreatedAtDesc(venueId);
+        return reviews.stream().map(this::mapReview).collect(Collectors.toList());
+    }
+
+    // new: get paginated reviews for a venue
+    public org.springframework.data.domain.Page<ReviewResponse> getReviewsPaginated(Integer venueId, int page, int size) {
+        Pageable p = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        Page<Review> pr = reviewRepository.findByBookingFieldVenueId(venueId, p);
+        return pr.map(this::mapReview);
+    }
+
+    private ReviewResponse mapReview(Review r) {
+        if (r == null) return null;
+        ReviewResponse resp = new ReviewResponse();
+        resp.setId(r.getId());
+        resp.setBookingId(r.getBooking() != null ? r.getBooking().getId() : null);
+        resp.setCustomerId(r.getCustomer() != null ? r.getCustomer().getId() : null);
+        resp.setCustomerName(r.getCustomer() != null ? r.getCustomer().getName() : null);
+        resp.setRating(r.getRating());
+        resp.setComment(r.getComment());
+        resp.setPhotos(r.getPhotos());
+        resp.setCreatedAt(r.getCreatedAt());
+        resp.setUpdatedAt(r.getUpdatedAt());
+        return resp;
     }
 
     private VenueResponse toResponse(Venue v) {

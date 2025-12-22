@@ -3,9 +3,12 @@ package com.badminton.shop.ws_booking_sport.venue.controller;
 import com.badminton.shop.ws_booking_sport.dto.request.AddVenueRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.UpdateVenueRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.UpdateMainImageRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.CreateFieldRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.VenueResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.DataResponse;
+import com.badminton.shop.ws_booking_sport.dto.response.FieldResponse;
 import com.badminton.shop.ws_booking_sport.venue.service.VenueService;
+import com.badminton.shop.ws_booking_sport.dto.response.ReviewResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,6 +45,14 @@ public class VenueController {
         return ResponseEntity.ok(body);
     }
 
+    // batch add fields to venue (owner/admin)
+    @PostMapping("/{id}/fields/batch")
+    public ResponseEntity<DataResponse> addFields(@PathVariable("id") Integer venueId, @RequestBody List<CreateFieldRequest> reqs, HttpServletRequest request) {
+        List<FieldResponse> resp = venueService.addFields(venueId, reqs, request.getHeader("Authorization"));
+        DataResponse body = DataResponse.success(resp, "Fields added", HttpStatus.CREATED.value());
+        return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
     // update main image (set/replace first image) - owner/admin only
     @PutMapping("/{id}/main-image")
     public ResponseEntity<DataResponse> updateMainImage(@PathVariable Integer id, @RequestBody UpdateMainImageRequest req, HttpServletRequest request) {
@@ -69,6 +80,24 @@ public class VenueController {
     public ResponseEntity<DataResponse> listByOwner(@PathVariable Integer ownerId) {
         List<VenueResponse> list = venueService.listByOwner(ownerId);
         DataResponse body = DataResponse.success(list, "Venues fetched for owner", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    // new endpoint: latest 5 reviews for a venue
+    @GetMapping("/{id}/reviews/latest")
+    public ResponseEntity<DataResponse> latestReviews(@PathVariable("id") Integer venueId) {
+        List<ReviewResponse> list = venueService.getLatestReviews(venueId);
+        DataResponse body = DataResponse.success(list, "Latest reviews fetched", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    // new endpoint: paginated reviews for a venue (page, size)
+    @GetMapping("/{id}/reviews")
+    public ResponseEntity<DataResponse> paginatedReviews(@PathVariable("id") Integer venueId,
+                                                         @RequestParam(value = "page", defaultValue = "0") int page,
+                                                         @RequestParam(value = "size", defaultValue = "10") int size) {
+        var pageResp = venueService.getReviewsPaginated(venueId, page, size);
+        DataResponse body = DataResponse.success(pageResp, "Reviews fetched", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
 }

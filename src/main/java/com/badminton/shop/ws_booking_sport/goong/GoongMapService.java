@@ -55,12 +55,15 @@ public class GoongMapService {
                     .toUri();
 
             logger.info("Calling Goong API: {}", uri);
+            logger.debug("Unsigned address sent to Goong: {}", unsignedAddress);
 
             // Gọi API
             ResponseEntity<GoongResponse> responseEntity = restTemplate.getForEntity(uri, GoongResponse.class);
 
             if (responseEntity.getStatusCode().is2xxSuccessful() && responseEntity.getBody() != null) {
                 GoongResponse response = responseEntity.getBody();
+
+                logger.debug("Full Goong response: {}", response);
 
                 if ("OK".equals(response.getStatus())
                         && response.getResults() != null

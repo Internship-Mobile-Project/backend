@@ -13,7 +13,7 @@ public class PriceRule {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    private String dayOfWeek;
+    private int dayOfWeek;
     private LocalTime startTime;
     private LocalTime endTime;
     private double pricePerHour;
