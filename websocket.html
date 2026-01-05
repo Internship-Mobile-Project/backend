@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test WebSocket (Raw Mode)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .box { margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; background: #f9f9f9; }
+        #logs { height: 300px; overflow-y: scroll; background: #222; color: #0f0; padding: 10px; border: 1px solid #999; }
+        input { padding: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>⚡️ Test WebSocket (Raw Stomp Client)</h2>
+    <p>Chế độ này mô phỏng y hệt Postman: Kết nối thẳng vào <b>/ws/websocket</b></p>
+
+    <div class="box">
+        <label>1. Nhập JWT Token:</label><br>
+        <input type="text" id="jwtToken" style="width: 100%;" placeholder="eyJhbGci...">
+    </div>
+
+    <div class="box">
+        <label>2. Kết nối:</label>
+        <button onclick="connect()">CONNECT</button>
+        <button onclick="disconnect()" disabled id="btnDisconnect">DISCONNECT</button>
+        <span id="status" style="font-weight:bold; color:red">🔴 Disconnected</span>
+    </div>
+
+    <div class="box">
+        <label>3. Chat (Room ID):</label><br>
+        Room ID: <input type="text" id="roomId" value="room1"><br>
+        Message: <input type="text" id="message" value="Hello from Browser"><br>
+        <button onclick="sendMessage()">SEND</button>
+    </div>
+
+    <div id="logs"></div>
+
+    <script>
+        var stompClient = null;
+
+        function log(msg) {
+            var logs = document.getElementById('logs');
+            var p = document.createElement('div');
+            p.innerHTML = msg;
+            logs.prepend(p);
+        }
+
+        function connect() {
+            var token = document.getElementById('jwtToken').value.trim();
+            if (!token) { alert("Thiếu Token!"); return; }
+
+            // 🔥 QUAN TRỌNG: Dùng ws:// và đường dẫn /ws/websocket + token query param
+            // Đây là cách Postman đang chạy
+            var url = 'ws://localhost:8080/ws/websocket?token=' + token;
+            
+            log("Connecting to: " + url);
+
+            // Tạo Stomp Client trực tiếp trên nền WebSocket
+            stompClient = Stomp.client(url);
+
+            // Tắt debug log rác của Stomp nếu muốn
+            // stompClient.debug = null; 
+
+            stompClient.connect({}, function (frame) {
+                document.getElementById('status').innerHTML = "🟢 Connected";
+                document.getElementById('status').style.color = "green";
+                document.getElementById('btnDisconnect').disabled = false;
+                log("✅ <b>Connected!</b>");
+
+                // Subscribe vào Topic để nhận tin nhắn
+                var roomId = document.getElementById('roomId').value;
+                // Phải thêm chữ "chat" vào cho khớp với biến destSlash trong Java
+                var subUrl = '/topic/chat/' + roomId;
+                
+                log("Subscribing to: " + subUrl);
+                stompClient.subscribe(subUrl, function (messageOutput) {
+                    log("📩 <b>Nhận tin:</b> " + messageOutput.body);
+                });
+
+            }, function (error) {
+                console.error(error);
+                log("<span style='color:red'>❌ Lỗi kết nối: " + error + "</span>");
+                log("<i>Gợi ý: Kiểm tra lại Token hoặc xem log IntelliJ</i>");
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+            }
+            document.getElementById('status').innerHTML = "🔴 Disconnected";
+            document.getElementById('status').style.color = "red";
+            document.getElementById('btnDisconnect').disabled = true;
+            log("Disconnected");
+        }
+
+        function sendMessage() {
+            var roomId = document.getElementById('roomId').value;
+            var content = document.getElementById('message').value;
+
+            if (!stompClient) { alert("Chưa kết nối!"); return; }
+
+            // Gửi tin nhắn
+            var sendUrl = "/app/chat/" + roomId + "/send";
+            var payload = JSON.stringify({'content': content});
+
+            stompClient.send(sendUrl, {}, payload);
+            log("📤 <b>Gửi:</b> " + payload);
+        }
+    </script>
+</body>
+</html>

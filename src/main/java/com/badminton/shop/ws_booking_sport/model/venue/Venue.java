@@ -1,5 +1,6 @@
 package com.badminton.shop.ws_booking_sport.model.venue;
 
+import com.badminton.shop.ws_booking_sport.model.core.Address;
 import com.badminton.shop.ws_booking_sport.model.core.Owner;
 import jakarta.persistence.*;
 import lombok.*;
@@ -21,7 +22,8 @@ public class Venue {
     private String description;
     private float rating;
     private String sport;
-    private String address;
+    @Embedded
+    private Address address;
     private LocalTime timeOpen;
     private LocalTime timeClose;
 

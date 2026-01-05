@@ -11,7 +11,7 @@ import java.time.LocalTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class AvailabilitySlot {
+public class Slot {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;

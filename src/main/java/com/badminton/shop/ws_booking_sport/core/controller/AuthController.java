@@ -1,14 +1,7 @@
 package com.badminton.shop.ws_booking_sport.core.controller;
 
 import com.badminton.shop.ws_booking_sport.core.service.UserService;
-import com.badminton.shop.ws_booking_sport.dto.request.RegisterRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.RefreshRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.AuthRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.VerifyRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ResendVerifyRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ChangePasswordRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordResetRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.*;
 import com.badminton.shop.ws_booking_sport.dto.response.RegisterResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.RefreshResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.AuthResponse;
@@ -22,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/auth")
+@CrossOrigin("*")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -47,6 +41,19 @@ public class AuthController {
         DataResponse body = DataResponse.success(resp, "Login successful", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
+    @PostMapping("/google-login")
+    public ResponseEntity<DataResponse> googleLogin(@RequestBody GoogleLoginRequest request) {
+        AuthResponse response = userService.authenticateGoogle(request.getIdToken());
+        DataResponse body = DataResponse.success(response, "Google login successful", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    @PostMapping("/facebook-login")
+    public ResponseEntity<DataResponse> facebookLogin(@RequestBody FacebookLoginRequest request) {
+        AuthResponse response = userService.authenticateFacebook(request.getAccessToken());
+        DataResponse body = DataResponse.success(response, "Facebook login successful", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
 
     @PostMapping("/refresh")
     public ResponseEntity<DataResponse> refresh(@RequestBody RefreshRequest req) {
@@ -54,7 +61,7 @@ public class AuthController {
         DataResponse body = DataResponse.success(resp, "Token refreshed", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
-
+    
     @PostMapping("/verify/send")
     public ResponseEntity<DataResponse> resendVerification(@RequestBody ResendVerifyRequest req) {
         userService.resendVerification(req);

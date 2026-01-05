@@ -12,7 +12,6 @@ public class UpdateUserRequest {
     private String name;
     private String phone;
     private String avatarUrl;
-    private String backgroundUrl;
-    private Address address; // full address object for simplicity
+    private AddressRequest addressRequest;
 }
 

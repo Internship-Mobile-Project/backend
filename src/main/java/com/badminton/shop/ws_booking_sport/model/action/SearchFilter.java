@@ -32,3 +32,4 @@ public class SearchFilter {
     private String sortBy; // DISTANCE, PRICE, RATING, AVAILABILITY
 }
 
+

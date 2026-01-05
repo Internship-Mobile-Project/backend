@@ -1,37 +1,35 @@
 package com.badminton.shop.ws_booking_sport.core.service;
 
+import com.badminton.shop.ws_booking_sport.handleException.AuthenticationFailedException;
 import com.badminton.shop.ws_booking_sport.core.repository.AccountRepository;
 import com.badminton.shop.ws_booking_sport.core.repository.UserRepository;
-import com.badminton.shop.ws_booking_sport.dto.request.RegisterRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.RefreshRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.AuthRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.VerifyRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ResendVerifyRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.UpdateUserRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ChangePasswordRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.ForgotPasswordResetRequest;
-import com.badminton.shop.ws_booking_sport.dto.response.RegisterResponse;
-import com.badminton.shop.ws_booking_sport.dto.response.RefreshResponse;
-import com.badminton.shop.ws_booking_sport.dto.response.AuthResponse;
-import com.badminton.shop.ws_booking_sport.dto.response.MeResponse;
-import com.badminton.shop.ws_booking_sport.dto.response.UserPublicResponse;
+import com.badminton.shop.ws_booking_sport.dto.request.*;
+import com.badminton.shop.ws_booking_sport.dto.response.*;
+import com.badminton.shop.ws_booking_sport.enums.AuthProvider;
 import com.badminton.shop.ws_booking_sport.enums.Role;
-import com.badminton.shop.ws_booking_sport.model.core.Account;
-import com.badminton.shop.ws_booking_sport.model.core.Customer;
-import com.badminton.shop.ws_booking_sport.model.core.User;
-import com.badminton.shop.ws_booking_sport.model.core.Owner;
+import com.badminton.shop.ws_booking_sport.goong.GoongMapService;
+import com.badminton.shop.ws_booking_sport.goong.GoongResponse;
+import com.badminton.shop.ws_booking_sport.model.core.*;
 import com.badminton.shop.ws_booking_sport.security.JwtService;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.gson.GsonFactory;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Date;
-import java.util.Random;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -43,14 +41,185 @@ public class UserService {
     private final JwtService jwtService;
     private final EmailService emailService;
     private final VerificationRateLimiter verificationRateLimiter;
-
+    private final GoongMapService goongMapService;
     private static final int VERIFY_CODE_EXPIRY_MINUTES = 15; // verify code valid for 15 minutes
 
+    // Lấy ClientID từ file properties
+    @Value("${spring.security.oauth2.client.registration.google.client-id}")
+    private String googleClientId;
     private String generateVerificationCode() {
         Random rnd = new Random();
         int number = 100000 + rnd.nextInt(900000);
         return String.valueOf(number);
     }
+    public AuthResponse authenticateGoogle(String idTokenString) {
+        try {
+            // 1. Cấu hình Verifier
+            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
+                    .setAudience(Collections.singletonList(googleClientId))
+                    .build();
+
+            // 2. Verify Token
+            GoogleIdToken idToken = verifier.verify(idTokenString);
+            if (idToken == null) {
+                throw new AuthenticationFailedException("Invalid or expired Google ID token");
+            }
+
+            // 3. Lấy thông tin từ Google Payload
+            GoogleIdToken.Payload payload = idToken.getPayload();
+            String email = payload.getEmail();
+            String fullName = (String) payload.get("name");
+            String picture = (String) payload.get("picture");
+
+            // 4. Tìm hoặc Tạo Account mới
+            Account account = accountRepository.findByEmail(email).orElseGet(() -> {
+                Account newAccount = new Account();
+                User newUser = new User();
+                newUser.setName(fullName);
+                newUser.setActive(true);
+                newUser.setAvatarUrl(picture);
+                newUser.setCreatedAt(LocalDateTime.now());
+                newUser = userRepository.save(newUser);
+                newAccount.setUser(newUser);
+                newAccount.setEmail(email);
+                newAccount.setPassword(null); // Không cần pass
+                newAccount.setAuthProvider(AuthProvider.GOOGLE);
+
+                // Set Role mặc định (Nên xử lý kỹ hơn ở đây thay vì try-catch lỏng lẻo)
+                try {
+                    newAccount.setRole(Role.CUSTOMER);
+                } catch (Exception e) {
+                    // Log warning nếu cần
+                }
+                return accountRepository.save(newAccount);
+            });
+
+            // Ensure account role for social logins is CUSTOMER (force for existing accounts)
+            if (account.getRole() == null || account.getRole() != Role.CUSTOMER) {
+                account.setRole(Role.CUSTOMER);
+                accountRepository.save(account);
+            }
+
+            // 5. Tạo JWT Token
+            String accessToken = jwtService.generateAccessToken(account.getUser(), email, account.getRole());
+            String refreshToken = jwtService.generateRefreshToken(account.getUser(), email, account.getRole());
+
+            // 6. Trả về Response
+            Integer venueId = null;
+            if (account.getUser() instanceof com.badminton.shop.ws_booking_sport.model.core.Owner) {
+                com.badminton.shop.ws_booking_sport.model.core.Owner owner = (com.badminton.shop.ws_booking_sport.model.core.Owner) account.getUser();
+                if (owner.getVenues() != null && !owner.getVenues().isEmpty() && owner.getVenues().get(0) != null) {
+                    venueId = owner.getVenues().get(0).getId();
+                }
+            }
+
+            return new AuthResponse(
+                    account.getUser().getId(),
+                    account.getUser().getName(),
+                    account.getEmail(),
+                    accessToken,
+                    refreshToken,
+                    account.getRole(),
+                    venueId
+            );
+        } catch (GeneralSecurityException | IOException ex) {
+            throw new AuthenticationFailedException("Failed to verify Google ID token", ex);
+        }
+    }
+
+    // Facebook login: validate access token via Facebook Graph API and create/find account
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public AuthResponse authenticateFacebook(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) throw new AuthenticationFailedException("Access token is required");
+
+        RestTemplate rest = new RestTemplate();
+        String encoded = URLEncoder.encode(accessToken, StandardCharsets.UTF_8);
+        String url = "https://graph.facebook.com/me?fields=id,name,email,picture&access_token=" + encoded;
+
+        Map<String, Object> fbResp;
+        try {
+            fbResp = rest.getForObject(url, Map.class);
+        } catch (Exception ex) {
+            throw new AuthenticationFailedException("Invalid Facebook access token", ex);
+        }
+
+        if (fbResp == null || fbResp.get("id") == null) {
+            throw new AuthenticationFailedException("Invalid Facebook access token");
+        }
+
+        String fbId = String.valueOf(fbResp.get("id"));
+        String email = (String) fbResp.get("email");
+        String fullName = (String) fbResp.get("name");
+        String picture = null;
+        try {
+            Object picObj = fbResp.get("picture");
+            if (picObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> picMap = (Map<String, Object>) picObj;
+                Object data = picMap.get("data");
+                if (data instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> dataMap = (Map<String, Object>) data;
+                    Object urlObj = dataMap.get("url");
+                    if (urlObj != null) picture = urlObj.toString();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        // If Facebook doesn't expose email (user didn't grant), synthesize one to ensure uniqueness
+        if (email == null || email.isBlank()) {
+            email = fbId + "@facebook.local";
+        }
+
+        // make final copies for lambda capture
+        final String finalEmail = email;
+        final String finalFullName = fullName != null ? fullName : "Facebook User";
+        final String finalPicture = picture;
+
+        Account account = accountRepository.findByEmail(finalEmail).orElseGet(() -> {
+            Account newAccount = new Account();
+            User newUser = new User();
+            newUser.setName(finalFullName);
+            newUser.setActive(true);
+            newUser.setAvatarUrl(finalPicture);
+            newUser.setCreatedAt(LocalDateTime.now());
+            newUser = userRepository.save(newUser);
+
+            newAccount.setUser(newUser);
+            newAccount.setEmail(finalEmail);
+            newAccount.setPassword(null);
+            newAccount.setAuthProvider(AuthProvider.FACEBOOK);
+            try {
+                newAccount.setRole(Role.CUSTOMER);
+            } catch (Exception e) {
+                // ignore
+            }
+            return accountRepository.save(newAccount);
+        });
+
+        // Ensure account role for social logins is CUSTOMER (force for existing accounts)
+        if (account.getRole() == null || account.getRole() != Role.CUSTOMER) {
+            account.setRole(Role.CUSTOMER);
+            accountRepository.save(account);
+        }
+
+        // generate tokens
+        String access = jwtService.generateAccessToken(account.getUser(), account.getEmail(), account.getRole());
+        String refresh = jwtService.generateRefreshToken(account.getUser(), account.getEmail(), account.getRole());
+
+        Integer venueId = null;
+        if (account.getUser() instanceof com.badminton.shop.ws_booking_sport.model.core.Owner) {
+            com.badminton.shop.ws_booking_sport.model.core.Owner owner = (com.badminton.shop.ws_booking_sport.model.core.Owner) account.getUser();
+            if (owner.getVenues() != null && !owner.getVenues().isEmpty() && owner.getVenues().get(0) != null) {
+                venueId = owner.getVenues().get(0).getId();
+            }
+        }
+
+        return new AuthResponse(account.getUser().getId(), account.getUser().getName(), account.getEmail(), access, refresh, account.getRole(), venueId);
+    }
+
+
     @Transactional
     public RegisterResponse register(RegisterRequest req) {
         // validate password match
@@ -81,6 +250,7 @@ public class UserService {
         // create Account
         Account account = new Account();
         account.setEmail(email);
+        account.setAuthProvider(AuthProvider.LOCAL);
         account.setPassword(passwordEncoder.encode(req.getPassword()));
         account.setVerified(false);
         account.setLastLogin(null);
@@ -225,7 +395,15 @@ public class UserService {
         String access = jwtService.generateAccessToken(user, account.getEmail(), role);
         String refresh = jwtService.generateRefreshToken(user, account.getEmail(), role);
 
-        return new AuthResponse(user.getId(), user.getName(), account.getEmail(), access, refresh, role);
+        Integer venueId = null;
+        if (user instanceof com.badminton.shop.ws_booking_sport.model.core.Owner) {
+            com.badminton.shop.ws_booking_sport.model.core.Owner owner = (com.badminton.shop.ws_booking_sport.model.core.Owner) user;
+            if (owner.getVenues() != null && !owner.getVenues().isEmpty() && owner.getVenues().get(0) != null) {
+                venueId = owner.getVenues().get(0).getId();
+            }
+        }
+
+        return new AuthResponse(user.getId(), user.getName(), account.getEmail(), access, refresh, role, venueId);
     }
 
     public RegisterResponse registerOwner(RegisterRequest req) {
@@ -429,9 +607,47 @@ public class UserService {
         if (req.getName() != null) user.setName(req.getName());
         if (req.getPhone() != null) user.setPhone(req.getPhone());
         if (req.getAvatarUrl() != null) user.setAvatarUrl(req.getAvatarUrl());
-        if (req.getBackgroundUrl() != null) user.setBackgroundUrl(req.getBackgroundUrl());
-        if (req.getAddress() != null) user.setAddress(req.getAddress());
+        AddressRequest addrReq = req.getAddressRequest();
 
+        if (addrReq != null) {
+            // 1. Lấy địa chỉ hiện tại từ DB (nếu chưa có thì tạo mới)
+            Address currentAddr = user.getAddress();
+            if (currentAddr == null) {
+                currentAddr = new Address();
+            }
+
+            // 2. MERGE: Cập nhật text trước (lấy cái mới đè lên cái cũ)
+            if (addrReq.getStreet() != null) currentAddr.setStreet(addrReq.getStreet());
+            if (addrReq.getDistrict() != null) currentAddr.setDistrict(addrReq.getDistrict());
+            if (addrReq.getCity() != null) currentAddr.setCity(addrReq.getCity());
+            if (addrReq.getProvince() != null) currentAddr.setProvince(addrReq.getProvince());
+
+            List<String> addressParts = new ArrayList<>();
+            if (hasText(currentAddr.getStreet())) addressParts.add(currentAddr.getStreet());
+            if (hasText(currentAddr.getDistrict())) addressParts.add(currentAddr.getDistrict());
+            if (hasText(currentAddr.getCity())) addressParts.add(currentAddr.getCity());
+            if (hasText(currentAddr.getProvince())) addressParts.add(currentAddr.getProvince());
+
+            // 4. Gọi API lấy tọa độ (Chỉ gọi khi có địa chỉ)
+            if (!addressParts.isEmpty()) {
+                String fullAddressToGeocode = String.join(", ", addressParts);
+                try {
+                    GoongResponse.Location location = goongMapService.getGeoLocation(fullAddressToGeocode);
+
+                    if (location != null) {
+                        // Cập nhật tọa độ mới vào object
+                        currentAddr.setLatitude(location.getLat());
+                        currentAddr.setLongitude(location.getLng());
+                    }
+                } catch (Exception e) {
+                    // Log lỗi (ví dụ mạng lag), giữ nguyên tọa độ cũ, không throw exception
+                    System.err.println("Warning: Failed to update geolocation: " + e.getMessage());
+                }
+            }
+
+            // 5. Set ngược lại vào User để chuẩn bị save
+            user.setAddress(currentAddr);
+        }
         user.setUpdatedAt(LocalDateTime.now());
         user = userRepository.save(user);
 
@@ -452,6 +668,9 @@ public class UserService {
         resp.setUpdatedAt(user.getUpdatedAt());
 
         return resp;
+    }
+    private boolean hasText(String s) {
+        return s != null && !s.trim().isEmpty();
     }
 
     // new: change password

@@ -16,5 +16,6 @@ public class AuthResponse {
     private String accessToken;
     private String refreshToken;
     private Role role;
+    // optional: when an owner logs in, include their primary venue id for the client
+    private Integer venueId;
 }
-

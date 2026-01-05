@@ -15,13 +15,9 @@ public class Field {
 
     private String name;
     private String type;
-    private double price;
 
     @ManyToOne
     private Venue venue;
-
-    @OneToMany(mappedBy = "field", cascade = CascadeType.ALL)
-    private List<AvailabilitySlot> slots;
 
     @OneToMany(mappedBy = "field", cascade = CascadeType.ALL)
     private List<PriceRule> priceRules;

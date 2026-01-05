@@ -2,11 +2,12 @@ package com.badminton.shop.ws_booking_sport.model.booking;
 
 import com.badminton.shop.ws_booking_sport.enums.BookingStatus;
 import com.badminton.shop.ws_booking_sport.model.core.Customer;
-import com.badminton.shop.ws_booking_sport.model.venue.AvailabilitySlot;
+import com.badminton.shop.ws_booking_sport.model.venue.Slot;
 import com.badminton.shop.ws_booking_sport.model.venue.Field;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.List;
 
 
 @Entity
@@ -25,8 +26,8 @@ public class Booking {
     @ManyToOne
     private Field field;
 
-    @ManyToOne
-    private AvailabilitySlot slot;
+    @OneToMany
+    private List<Slot> slot;
 
     @OneToOne(mappedBy = "booking", cascade = CascadeType.ALL)
     private Payment payment;

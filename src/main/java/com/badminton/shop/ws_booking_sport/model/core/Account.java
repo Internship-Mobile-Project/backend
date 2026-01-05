@@ -1,6 +1,8 @@
 package com.badminton.shop.ws_booking_sport.model.core;
 
+import com.badminton.shop.ws_booking_sport.enums.AuthProvider;
 import com.badminton.shop.ws_booking_sport.enums.Role;
+import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -13,12 +15,13 @@ public class Account {
 
     @Id
     private String email;
-
+    @Nullable
     private String password;
     private boolean verified;
     private LocalDateTime lastLogin;
     private String verifyCode;
-
+    private AuthProvider authProvider;
+    private String authProviderId;
     @Enumerated(EnumType.STRING)
     private Role role;
 
