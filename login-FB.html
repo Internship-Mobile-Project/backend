@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Facebook Login API</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; justify-content: center; padding-top: 50px; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
+        h2 { text-align: center; color: #333; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background-color: #1877f2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.3s; }
+        button:hover { background-color: #166fe5; }
+        #response-area { margin-top: 20px; background: #2d2d2d; color: #76e094; padding: 15px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; display: none; font-family: monospace; }
+        .note { font-size: 0.85rem; color: #666; margin-bottom: 20px; background: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; }
+        a { color: #1877f2; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🛠️ Test Backend Login</h2>
+
+    <div class="note">
+        <strong>Lưu ý:</strong> Để có Access Token thật để test, bạn có thể lấy nhanh tại
+        <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API Explorer</a>.
+    </div>
+
+    <div class="form-group">
+        <label for="apiUrl">API Endpoint URL:</label>
+        <input type="text" id="apiUrl" value="http://localhost:8080/api/auth/facebook-login" placeholder="http://localhost:8080/...">
+    </div>
+
+    <div class="form-group">
+        <label for="accessToken">Facebook Access Token:</label>
+        <input type="text" id="accessToken" placeholder="Dán token vào đây..." autocomplete="off">
+    </div>
+
+    <button onclick="sendLoginRequest()" id="btnSubmit">Gửi Request (POST)</button>
+
+    <div id="response-area"></div>
+</div>
+
+<script>
+    async function sendLoginRequest() {
+        const url = document.getElementById('apiUrl').value;
+        const token = document.getElementById('accessToken').value;
+        const responseArea = document.getElementById('response-area');
+        const btn = document.getElementById('btnSubmit');
+
+        if (!token) {
+            alert("Vui lòng nhập Access Token!");
+            return;
+        }
+
+        // UI Loading state
+        btn.innerText = "Đang gửi...";
+        btn.disabled = true;
+        responseArea.style.display = 'block';
+        responseArea.innerText = "Đang chờ phản hồi từ server...";
+
+        try {
+            // Cấu trúc payload giống class Java của bạn
+            const payload = {
+                accessToken: token
+            };
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json(); // Hoặc response.text() nếu server không trả về JSON
+
+            // Hiển thị kết quả đẹp (pretty print)
+            responseArea.innerText = `Status: ${response.status}\n\n` + JSON.stringify(data, null, 2);
+            responseArea.style.color = response.ok ? '#76e094' : '#ff6b6b';
+
+        } catch (error) {
+            responseArea.innerText = "Lỗi kết nối: " + error.message + "\n\n(Kiểm tra xem Server đã bật chưa và có cấu hình CORS không?)";
+            responseArea.style.color = '#ff6b6b';
+        } finally {
+            btn.innerText = "Gửi Request (POST)";
+            btn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>

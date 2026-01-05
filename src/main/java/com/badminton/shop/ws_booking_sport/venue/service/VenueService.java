@@ -7,6 +7,7 @@ import com.badminton.shop.ws_booking_sport.dto.request.UpdateVenueRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.CreateFieldRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.VenueResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.FieldResponse;
+import com.badminton.shop.ws_booking_sport.dto.response.VenueDetailResponse;
 import com.badminton.shop.ws_booking_sport.goong.GoongMapService;
 import com.badminton.shop.ws_booking_sport.goong.GoongResponse;
 import com.badminton.shop.ws_booking_sport.model.core.Account;
@@ -43,6 +44,7 @@ public class VenueService {
     private final AccountRepository accountRepository;
     private final GoongMapService goongMapService;
     private final ReviewRepository reviewRepository;
+    private final FieldService fieldService;
 
     private Account validateOwner(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
@@ -149,6 +151,56 @@ public class VenueService {
         return toResponse(v);
     }
 
+    // NEW: get venue detail
+    public VenueDetailResponse getVenueDetail(Integer id) {
+        Venue v = venueRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Venue not found"));
+        VenueDetailResponse resp = new VenueDetailResponse();
+        resp.setId(v.getId());
+        resp.setName(v.getName());
+        resp.setDescription(v.getDescription());
+        resp.setSport(v.getSport());
+
+        // map address -> AddressRequest
+        if (v.getAddress() != null) {
+            Address a = v.getAddress();
+            AddressRequest ar = new AddressRequest();
+            ar.setStreet(a.getStreet());
+            ar.setDistrict(a.getDistrict());
+            ar.setCity(a.getCity());
+            ar.setProvince(a.getProvince());
+            resp.setAddress(ar);
+        }
+
+        // always set open/close times (may be null)
+        resp.setTimeOpen(v.getTimeOpen());
+        resp.setTimeClose(v.getTimeClose());
+
+        resp.setImageUrls(v.getImageUrls());
+        resp.setMainImageUrl((v.getImageUrls() != null && !v.getImageUrls().isEmpty()) ? v.getImageUrls().get(0) : null);
+
+        // fields with price rules
+        try {
+            resp.setFields(fieldService.listByVenue(v.getId()));
+        } catch (Exception e) {
+            resp.setFields(java.util.Collections.emptyList());
+        }
+
+        // latest reviews
+        try {
+            resp.setReviews(getLatestReviews(v.getId()));
+        } catch (Exception e) {
+            resp.setReviews(java.util.Collections.emptyList());
+        }
+
+        // facilities: not mapped to venue in current model -> return empty list
+        resp.setFacilities(java.util.Collections.emptyList());
+
+        resp.setOwnerId(v.getOwner() != null ? v.getOwner().getId() : null);
+        resp.setRating(v.getRating());
+
+        return resp;
+    }
+
     @Transactional
     public VenueResponse updateVenue(Integer id, UpdateVenueRequest req, String authorizationHeader) {
         if (req == null) throw new IllegalArgumentException("Request body is required");
@@ -217,6 +269,23 @@ public class VenueService {
 
     public List<VenueResponse> listByOwner(Integer ownerId) {
         return venueRepository.findByOwnerId(ownerId).stream().map(this::toResponse).collect(Collectors.toList());
+    }
+
+    // NEW: paginated list of venues
+    public Page<VenueResponse> listPaginated(int page, int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, size);
+        Pageable p = PageRequest.of(safePage, safeSize);
+        Page<Venue> pr = venueRepository.findAll(p);
+        return pr.map(this::toResponse);
+    }
+
+    // NEW: list venues for authenticated owner using Authorization header (access token)
+    public List<VenueResponse> listByOwner(String authorizationHeader) {
+        Account account = validateOwner(authorizationHeader);
+        Integer ownerId = account.getUser() != null ? account.getUser().getId() : null;
+        if (ownerId == null) throw new IllegalArgumentException("Owner id not found in account");
+        return listByOwner(ownerId);
     }
 
     // Update or set the main image (first image) for a venue

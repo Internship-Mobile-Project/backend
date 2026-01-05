@@ -1,5 +1,6 @@
 package com.badminton.shop.ws_booking_sport.core.service;
 
+import com.badminton.shop.ws_booking_sport.handleException.AuthenticationFailedException;
 import com.badminton.shop.ws_booking_sport.core.repository.AccountRepository;
 import com.badminton.shop.ws_booking_sport.core.repository.UserRepository;
 import com.badminton.shop.ws_booking_sport.dto.request.*;
@@ -20,8 +21,11 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -48,60 +52,171 @@ public class UserService {
         int number = 100000 + rnd.nextInt(900000);
         return String.valueOf(number);
     }
-    public AuthResponse authenticateGoogle(String idTokenString) throws GeneralSecurityException, IOException {
-        // 1. Cấu hình Verifier
-        GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
-                .setAudience(Collections.singletonList(googleClientId))
-                .build();
+    public AuthResponse authenticateGoogle(String idTokenString) {
+        try {
+            // 1. Cấu hình Verifier
+            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
+                    .setAudience(Collections.singletonList(googleClientId))
+                    .build();
 
-        // 2. Verify Token
-        GoogleIdToken idToken = verifier.verify(idTokenString);
-        if (idToken == null) {
-            throw new IllegalArgumentException("Invalid or expired Google ID token");
+            // 2. Verify Token
+            GoogleIdToken idToken = verifier.verify(idTokenString);
+            if (idToken == null) {
+                throw new AuthenticationFailedException("Invalid or expired Google ID token");
+            }
+
+            // 3. Lấy thông tin từ Google Payload
+            GoogleIdToken.Payload payload = idToken.getPayload();
+            String email = payload.getEmail();
+            String fullName = (String) payload.get("name");
+            String picture = (String) payload.get("picture");
+
+            // 4. Tìm hoặc Tạo Account mới
+            Account account = accountRepository.findByEmail(email).orElseGet(() -> {
+                Account newAccount = new Account();
+                User newUser = new User();
+                newUser.setName(fullName);
+                newUser.setActive(true);
+                newUser.setAvatarUrl(picture);
+                newUser.setCreatedAt(LocalDateTime.now());
+                newUser = userRepository.save(newUser);
+                newAccount.setUser(newUser);
+                newAccount.setEmail(email);
+                newAccount.setPassword(null); // Không cần pass
+                newAccount.setAuthProvider(AuthProvider.GOOGLE);
+
+                // Set Role mặc định (Nên xử lý kỹ hơn ở đây thay vì try-catch lỏng lẻo)
+                try {
+                    newAccount.setRole(Role.CUSTOMER);
+                } catch (Exception e) {
+                    // Log warning nếu cần
+                }
+                return accountRepository.save(newAccount);
+            });
+
+            // Ensure account role for social logins is CUSTOMER (force for existing accounts)
+            if (account.getRole() == null || account.getRole() != Role.CUSTOMER) {
+                account.setRole(Role.CUSTOMER);
+                accountRepository.save(account);
+            }
+
+            // 5. Tạo JWT Token
+            String accessToken = jwtService.generateAccessToken(account.getUser(), email, account.getRole());
+            String refreshToken = jwtService.generateRefreshToken(account.getUser(), email, account.getRole());
+
+            // 6. Trả về Response
+            Integer venueId = null;
+            if (account.getUser() instanceof com.badminton.shop.ws_booking_sport.model.core.Owner) {
+                com.badminton.shop.ws_booking_sport.model.core.Owner owner = (com.badminton.shop.ws_booking_sport.model.core.Owner) account.getUser();
+                if (owner.getVenues() != null && !owner.getVenues().isEmpty() && owner.getVenues().get(0) != null) {
+                    venueId = owner.getVenues().get(0).getId();
+                }
+            }
+
+            return new AuthResponse(
+                    account.getUser().getId(),
+                    account.getUser().getName(),
+                    account.getEmail(),
+                    accessToken,
+                    refreshToken,
+                    account.getRole(),
+                    venueId
+            );
+        } catch (GeneralSecurityException | IOException ex) {
+            throw new AuthenticationFailedException("Failed to verify Google ID token", ex);
+        }
+    }
+
+    // Facebook login: validate access token via Facebook Graph API and create/find account
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public AuthResponse authenticateFacebook(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) throw new AuthenticationFailedException("Access token is required");
+
+        RestTemplate rest = new RestTemplate();
+        String encoded = URLEncoder.encode(accessToken, StandardCharsets.UTF_8);
+        String url = "https://graph.facebook.com/me?fields=id,name,email,picture&access_token=" + encoded;
+
+        Map<String, Object> fbResp;
+        try {
+            fbResp = rest.getForObject(url, Map.class);
+        } catch (Exception ex) {
+            throw new AuthenticationFailedException("Invalid Facebook access token", ex);
         }
 
-        // 3. Lấy thông tin từ Google Payload
-        GoogleIdToken.Payload payload = idToken.getPayload();
-        String email = payload.getEmail();
-        String fullName = (String) payload.get("name");
-        String picture = (String) payload.get("picture");
+        if (fbResp == null || fbResp.get("id") == null) {
+            throw new AuthenticationFailedException("Invalid Facebook access token");
+        }
 
-        // 4. Tìm hoặc Tạo Account mới
-        Account account = accountRepository.findByEmail(email).orElseGet(() -> {
+        String fbId = String.valueOf(fbResp.get("id"));
+        String email = (String) fbResp.get("email");
+        String fullName = (String) fbResp.get("name");
+        String picture = null;
+        try {
+            Object picObj = fbResp.get("picture");
+            if (picObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> picMap = (Map<String, Object>) picObj;
+                Object data = picMap.get("data");
+                if (data instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> dataMap = (Map<String, Object>) data;
+                    Object urlObj = dataMap.get("url");
+                    if (urlObj != null) picture = urlObj.toString();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        // If Facebook doesn't expose email (user didn't grant), synthesize one to ensure uniqueness
+        if (email == null || email.isBlank()) {
+            email = fbId + "@facebook.local";
+        }
+
+        // make final copies for lambda capture
+        final String finalEmail = email;
+        final String finalFullName = fullName != null ? fullName : "Facebook User";
+        final String finalPicture = picture;
+
+        Account account = accountRepository.findByEmail(finalEmail).orElseGet(() -> {
             Account newAccount = new Account();
             User newUser = new User();
-            newUser.setName(fullName);
+            newUser.setName(finalFullName);
             newUser.setActive(true);
-            newUser.setAvatarUrl(picture);
+            newUser.setAvatarUrl(finalPicture);
             newUser.setCreatedAt(LocalDateTime.now());
             newUser = userRepository.save(newUser);
-            newAccount.setUser(newUser);
-            newAccount.setEmail(email);
-            newAccount.setPassword(null); // Không cần pass
-            newAccount.setAuthProvider(AuthProvider.GOOGLE);
 
-            // Set Role mặc định (Nên xử lý kỹ hơn ở đây thay vì try-catch lỏng lẻo)
+            newAccount.setUser(newUser);
+            newAccount.setEmail(finalEmail);
+            newAccount.setPassword(null);
+            newAccount.setAuthProvider(AuthProvider.FACEBOOK);
             try {
                 newAccount.setRole(Role.CUSTOMER);
             } catch (Exception e) {
-                // Log warning nếu cần
+                // ignore
             }
             return accountRepository.save(newAccount);
         });
 
-        // 5. Tạo JWT Token
-        String accessToken = jwtService.generateAccessToken(account.getUser(), email, account.getRole());
-        String refreshToken = jwtService.generateRefreshToken(account.getUser(), email, account.getRole());
+        // Ensure account role for social logins is CUSTOMER (force for existing accounts)
+        if (account.getRole() == null || account.getRole() != Role.CUSTOMER) {
+            account.setRole(Role.CUSTOMER);
+            accountRepository.save(account);
+        }
 
-        // 6. Trả về Response
-        return new AuthResponse(
-                account.getUser().getId(),
-                account.getUser().getName(),
-                account.getEmail(),
-                accessToken,
-                refreshToken,
-                account.getRole()
-        );
+        // generate tokens
+        String access = jwtService.generateAccessToken(account.getUser(), account.getEmail(), account.getRole());
+        String refresh = jwtService.generateRefreshToken(account.getUser(), account.getEmail(), account.getRole());
+
+        Integer venueId = null;
+        if (account.getUser() instanceof com.badminton.shop.ws_booking_sport.model.core.Owner) {
+            com.badminton.shop.ws_booking_sport.model.core.Owner owner = (com.badminton.shop.ws_booking_sport.model.core.Owner) account.getUser();
+            if (owner.getVenues() != null && !owner.getVenues().isEmpty() && owner.getVenues().get(0) != null) {
+                venueId = owner.getVenues().get(0).getId();
+            }
+        }
+
+        return new AuthResponse(account.getUser().getId(), account.getUser().getName(), account.getEmail(), access, refresh, account.getRole(), venueId);
     }
 
 
@@ -280,7 +395,15 @@ public class UserService {
         String access = jwtService.generateAccessToken(user, account.getEmail(), role);
         String refresh = jwtService.generateRefreshToken(user, account.getEmail(), role);
 
-        return new AuthResponse(user.getId(), user.getName(), account.getEmail(), access, refresh, role);
+        Integer venueId = null;
+        if (user instanceof com.badminton.shop.ws_booking_sport.model.core.Owner) {
+            com.badminton.shop.ws_booking_sport.model.core.Owner owner = (com.badminton.shop.ws_booking_sport.model.core.Owner) user;
+            if (owner.getVenues() != null && !owner.getVenues().isEmpty() && owner.getVenues().get(0) != null) {
+                venueId = owner.getVenues().get(0).getId();
+            }
+        }
+
+        return new AuthResponse(user.getId(), user.getName(), account.getEmail(), access, refresh, role, venueId);
     }
 
     public RegisterResponse registerOwner(RegisterRequest req) {
@@ -513,8 +636,8 @@ public class UserService {
 
                     if (location != null) {
                         // Cập nhật tọa độ mới vào object
-                        currentAddr.setLatitude((double) location.getLat());
-                        currentAddr.setLongitude((double) location.getLng());
+                        currentAddr.setLatitude(location.getLat());
+                        currentAddr.setLongitude(location.getLng());
                     }
                 } catch (Exception e) {
                     // Log lỗi (ví dụ mạng lag), giữ nguyên tọa độ cũ, không throw exception

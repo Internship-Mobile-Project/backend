@@ -7,6 +7,7 @@ import com.badminton.shop.ws_booking_sport.dto.request.CreateFieldRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.VenueResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.DataResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.FieldResponse;
+import com.badminton.shop.ws_booking_sport.dto.response.VenueDetailResponse;
 import com.badminton.shop.ws_booking_sport.venue.service.VenueService;
 import com.badminton.shop.ws_booking_sport.dto.response.ReviewResponse;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,14 @@ public class VenueController {
     public ResponseEntity<DataResponse> getVenue(@PathVariable Integer id) {
         VenueResponse resp = venueService.getVenue(id);
         DataResponse body = DataResponse.success(resp, "Venue fetched", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    // new: detailed venue info for FE
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<DataResponse> getVenueDetail(@PathVariable Integer id) {
+        VenueDetailResponse resp = venueService.getVenueDetail(id);
+        DataResponse body = DataResponse.success(resp, "Venue detail fetched", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
 
@@ -80,6 +89,15 @@ public class VenueController {
     public ResponseEntity<DataResponse> listByOwner(@PathVariable Integer ownerId) {
         List<VenueResponse> list = venueService.listByOwner(ownerId);
         DataResponse body = DataResponse.success(list, "Venues fetched for owner", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    // NEW endpoint: get venues for the authenticated owner based on the Authorization header
+    @GetMapping("/owner")
+    public ResponseEntity<DataResponse> listByAuthenticatedOwner(HttpServletRequest request) {
+        String auth = request.getHeader("Authorization");
+        List<VenueResponse> list = venueService.listByOwner(auth);
+        DataResponse body = DataResponse.success(list, "Venues fetched for authenticated owner", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
 

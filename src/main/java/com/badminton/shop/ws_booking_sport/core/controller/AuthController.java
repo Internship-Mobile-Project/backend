@@ -13,11 +13,9 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-import java.io.IOException;
-import java.security.GeneralSecurityException;
-
 @RestController
 @RequestMapping("/api/auth")
+@CrossOrigin("*")
 @RequiredArgsConstructor
 public class AuthController {
 
@@ -44,25 +42,18 @@ public class AuthController {
         return ResponseEntity.ok(body);
     }
     @PostMapping("/google-login")
-        public ResponseEntity<?> googleLogin(@RequestBody GoogleLoginRequest request) {
-            try {
-                // Gọi service xử lý
-                AuthResponse response = userService.authenticateGoogle(request.getIdToken());
-                return ResponseEntity.ok(response);
+    public ResponseEntity<DataResponse> googleLogin(@RequestBody GoogleLoginRequest request) {
+        AuthResponse response = userService.authenticateGoogle(request.getIdToken());
+        DataResponse body = DataResponse.success(response, "Google login successful", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
 
-            } catch (IllegalArgumentException e) {
-                // Lỗi do token không hợp lệ (trả về 401)
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
-
-            } catch (GeneralSecurityException | IOException e) {
-                // Lỗi kỹ thuật khi verify với Google (trả về 500)
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to verify Google ID token");
-
-            } catch (Exception e) {
-                // Các lỗi khác
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Authentication error");
-            }
-        }
+    @PostMapping("/facebook-login")
+    public ResponseEntity<DataResponse> facebookLogin(@RequestBody FacebookLoginRequest request) {
+        AuthResponse response = userService.authenticateFacebook(request.getAccessToken());
+        DataResponse body = DataResponse.success(response, "Facebook login successful", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
 
     @PostMapping("/refresh")
     public ResponseEntity<DataResponse> refresh(@RequestBody RefreshRequest req) {
@@ -70,7 +61,7 @@ public class AuthController {
         DataResponse body = DataResponse.success(resp, "Token refreshed", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
-
+    
     @PostMapping("/verify/send")
     public ResponseEntity<DataResponse> resendVerification(@RequestBody ResendVerifyRequest req) {
         userService.resendVerification(req);

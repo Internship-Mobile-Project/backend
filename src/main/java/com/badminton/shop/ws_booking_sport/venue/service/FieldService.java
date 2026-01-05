@@ -137,6 +137,17 @@ public class FieldService {
         r.setName(f.getName());
         r.setType(f.getType());
         r.setVenueId(f.getVenue() != null ? f.getVenue().getId() : null);
+        // include price rules for this field
+        if (f.getId() != null) {
+            try {
+                r.setPriceRules(priceRuleService.listByField(f.getId()));
+            } catch (Exception e) {
+                // in case of any issue fetching rules, set empty list to avoid breaking response
+                r.setPriceRules(java.util.Collections.emptyList());
+            }
+        } else {
+            r.setPriceRules(java.util.Collections.emptyList());
+        }
         return r;
     }
 }
