@@ -45,6 +45,7 @@ public class VenueService {
     private final GoongMapService goongMapService;
     private final ReviewRepository reviewRepository;
     private final FieldService fieldService;
+    private final FacilityService facilityService;
 
     private Account validateOwner(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
@@ -192,8 +193,12 @@ public class VenueService {
             resp.setReviews(java.util.Collections.emptyList());
         }
 
-        // facilities: not mapped to venue in current model -> return empty list
-        resp.setFacilities(java.util.Collections.emptyList());
+        // facilities: map using FacilityService
+        try {
+            resp.setFacilities(facilityService.listByVenue(v.getId()));
+        } catch (Exception e) {
+            resp.setFacilities(java.util.Collections.emptyList());
+        }
 
         resp.setOwnerId(v.getOwner() != null ? v.getOwner().getId() : null);
         resp.setRating(v.getRating());

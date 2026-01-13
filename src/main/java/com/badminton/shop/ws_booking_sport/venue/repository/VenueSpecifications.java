@@ -38,15 +38,14 @@ public class VenueSpecifications {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("timeClose"), tEnd));
             }
 
-            // price range: join fields -> priceRules and apply min/max constraints
+            // price range: join fields and apply min/max constraints on fields.pricePerHour
             if (filter.getMinPrice() != null || filter.getMaxPrice() != null) {
                 Join<Object, Object> fields = root.join("fields", JoinType.LEFT);
-                Join<Object, Object> priceRules = fields.join("priceRules", JoinType.LEFT);
                 if (filter.getMinPrice() != null) {
-                    predicates.add(cb.greaterThanOrEqualTo(priceRules.get("pricePerHour"), filter.getMinPrice()));
+                    predicates.add(cb.greaterThanOrEqualTo(fields.get("pricePerHour"), filter.getMinPrice()));
                 }
                 if (filter.getMaxPrice() != null) {
-                    predicates.add(cb.lessThanOrEqualTo(priceRules.get("pricePerHour"), filter.getMaxPrice()));
+                    predicates.add(cb.lessThanOrEqualTo(fields.get("pricePerHour"), filter.getMaxPrice()));
                 }
             }
 

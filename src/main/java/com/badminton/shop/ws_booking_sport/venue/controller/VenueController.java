@@ -33,14 +33,6 @@ public class VenueController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<DataResponse> getVenue(@PathVariable Integer id) {
-        VenueResponse resp = venueService.getVenue(id);
-        DataResponse body = DataResponse.success(resp, "Venue fetched", HttpStatus.OK.value());
-        return ResponseEntity.ok(body);
-    }
-
-    // new: detailed venue info for FE
-    @GetMapping("/{id}/detail")
     public ResponseEntity<DataResponse> getVenueDetail(@PathVariable Integer id) {
         VenueDetailResponse resp = venueService.getVenueDetail(id);
         DataResponse body = DataResponse.success(resp, "Venue detail fetched", HttpStatus.OK.value());

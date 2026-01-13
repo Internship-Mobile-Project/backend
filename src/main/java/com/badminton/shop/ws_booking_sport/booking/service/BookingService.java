@@ -18,10 +18,8 @@ import com.badminton.shop.ws_booking_sport.model.core.Account;
 import com.badminton.shop.ws_booking_sport.model.core.Customer;
 import com.badminton.shop.ws_booking_sport.model.core.User;
 import com.badminton.shop.ws_booking_sport.model.venue.Field;
-import com.badminton.shop.ws_booking_sport.model.venue.PriceRule;
 import com.badminton.shop.ws_booking_sport.model.venue.Slot;
 import com.badminton.shop.ws_booking_sport.venue.repository.FieldRepository;
-import com.badminton.shop.ws_booking_sport.venue.repository.PriceRuleRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +42,6 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final SlotRepository slotRepository;
-    private final PriceRuleRepository priceRuleRepository;
     private final FieldRepository fieldRepository;
     private final CustomerRepository customerRepository;
     private final AccountRepository accountRepository;
@@ -117,54 +114,24 @@ public class BookingService {
             throw new ResourceUnavailableException("Requested time range overlaps with existing bookings or slots");
         }
 
-        // load price rules for the field
-        List<PriceRule> rules = priceRuleRepository.findByFieldId(fieldId);
-        int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Mon .. 7=Sun
-
         long totalRequestedMinutes = Duration.between(start, end).toMinutes();
         if (totalRequestedMinutes <= 0) throw new IllegalArgumentException("Invalid booking duration");
 
-        // calculate total price by summing overlap between request interval and each price rule for the day
-        double totalPrice = 0.0;
-        long coveredMinutes = 0;
+        // compute total price using single pricePerHour on Field
+        Double fieldPricePerHour = field.getPricePerHour();
+        if (fieldPricePerHour == null) throw new IllegalArgumentException("Field pricePerHour is not set");
 
-        for (PriceRule pr : rules) {
-            if (pr.getDayOfWeek() != dayOfWeek) continue;
-            LocalTime ruleStart = pr.getStartTime();
-            LocalTime ruleEnd = pr.getEndTime();
+        double totalPrice = (totalRequestedMinutes / 60.0) * fieldPricePerHour;
 
-            // compute overlap between [start,end) and [ruleStart,ruleEnd)
-            LocalTime overlapStart = start.isAfter(ruleStart) ? start : ruleStart;
-            LocalTime overlapEnd = end.isBefore(ruleEnd) ? end : ruleEnd;
-            if (overlapStart.isBefore(overlapEnd)) {
-                long minutes = Duration.between(overlapStart, overlapEnd).toMinutes();
-                coveredMinutes += minutes;
-                totalPrice += (minutes / 60.0) * pr.getPricePerHour();
-            }
-        }
-
-        if (coveredMinutes < totalRequestedMinutes) {
-            throw new IllegalArgumentException("Price rules do not cover the entire booking period");
-        }
-
-        // create slot entities per 30-minute chunks and compute per-slot price proportional to rules
+        // create slot entities per 30-minute chunks and compute per-slot price proportional to field price
         List<Slot> slotsToSave = new ArrayList<>();
         LocalTime cursor = start;
         while (cursor.isBefore(end)) {
             LocalTime slotEnd = cursor.plusMinutes(30);
             if (slotEnd.isAfter(end)) slotEnd = end;
 
-            // compute price for this slot by checking overlaps with rules
-            double slotPrice = 0.0;
-            for (PriceRule pr : rules) {
-                if (pr.getDayOfWeek() != dayOfWeek) continue;
-                LocalTime overlapStart = cursor.isAfter(pr.getStartTime()) ? cursor : pr.getStartTime();
-                LocalTime overlapEnd = slotEnd.isBefore(pr.getEndTime()) ? slotEnd : pr.getEndTime();
-                if (overlapStart.isBefore(overlapEnd)) {
-                    long minutes = Duration.between(overlapStart, overlapEnd).toMinutes();
-                    slotPrice += (minutes / 60.0) * pr.getPricePerHour();
-                }
-            }
+            long minutes = Duration.between(cursor, slotEnd).toMinutes();
+            double slotPrice = (minutes / 60.0) * fieldPricePerHour;
 
             Slot s = new Slot();
             s.setDate(date);

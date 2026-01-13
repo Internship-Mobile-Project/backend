@@ -7,7 +7,6 @@ import com.badminton.shop.ws_booking_sport.model.action.AreaSearchFilter;
 import com.badminton.shop.ws_booking_sport.model.action.LocationSearchFilter;
 import com.badminton.shop.ws_booking_sport.model.action.SearchFilter;
 import com.badminton.shop.ws_booking_sport.model.venue.Field;
-import com.badminton.shop.ws_booking_sport.model.venue.PriceRule;
 import com.badminton.shop.ws_booking_sport.model.venue.Venue;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueRepository;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueSpecifications;
@@ -93,15 +92,13 @@ public class VenueSearchService {
             vr.setLongitude(v.getAddress() != null ? v.getAddress().getLongitude() : null);
             vr.setDistanceKm(idToDistance.get(v.getId()));
 
-            // compute min price per hour across fields.priceRules
+            // compute min price per hour across fields.pricePerHour
             Double minPrice = null;
             if (v.getFields() != null) {
                 for (Field f : v.getFields()) {
-                    if (f.getPriceRules() != null) {
-                        for (PriceRule pr : f.getPriceRules()) {
-                            double pval = pr.getPricePerHour();
-                            if (minPrice == null || pval < minPrice) minPrice = pval;
-                        }
+                    Double pval = f.getPricePerHour();
+                    if (pval != null) {
+                        if (minPrice == null || pval < minPrice) minPrice = pval;
                     }
                 }
             }
@@ -201,5 +198,3 @@ public class VenueSearchService {
         return null;
     }
 }
-
-

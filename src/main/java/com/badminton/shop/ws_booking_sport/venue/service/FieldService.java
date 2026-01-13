@@ -3,9 +3,7 @@ package com.badminton.shop.ws_booking_sport.venue.service;
 import com.badminton.shop.ws_booking_sport.core.repository.AccountRepository;
 import com.badminton.shop.ws_booking_sport.dto.request.CreateFieldRequest;
 import com.badminton.shop.ws_booking_sport.dto.request.UpdateFieldRequest;
-import com.badminton.shop.ws_booking_sport.dto.request.CreatePriceRuleRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.FieldResponse;
-import com.badminton.shop.ws_booking_sport.dto.response.PriceRuleResponse;
 import com.badminton.shop.ws_booking_sport.model.core.Account;
 import com.badminton.shop.ws_booking_sport.model.venue.Field;
 import com.badminton.shop.ws_booking_sport.model.venue.Venue;
@@ -29,7 +27,6 @@ public class FieldService {
     private final VenueRepository venueRepository;
     private final JwtService jwtService;
     private final AccountRepository accountRepository;
-    private final PriceRuleService priceRuleService;
 
     private Account validateOwner(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
@@ -74,6 +71,7 @@ public class FieldService {
         f.setName(req.getName());
         f.setType(req.getType());
         f.setVenue(venue);
+        f.setPricePerHour(req.getPricePerHour());
 
         Field saved = fieldRepository.save(f);
         return toResponse(saved);
@@ -99,6 +97,7 @@ public class FieldService {
 
         if (req.getName() != null) f.setName(req.getName());
         if (req.getType() != null) f.setType(req.getType());
+        if (req.getPricePerHour() != null) f.setPricePerHour(req.getPricePerHour());
 
         Field saved = fieldRepository.save(f);
         return toResponse(saved);
@@ -124,30 +123,13 @@ public class FieldService {
         return fieldRepository.findByVenueId(venueId).stream().map(this::toResponse).collect(Collectors.toList());
     }
 
-    // New: Add multiple price rules to a field via FieldService delegating to PriceRuleService
-    @Transactional
-    public List<PriceRuleResponse> addPriceRules(Integer fieldId, List<CreatePriceRuleRequest> reqs, String authorizationHeader) {
-        // reuse validation logic in PriceRuleService (PriceRuleService will validate permissions)
-        return priceRuleService.addPriceRules(fieldId, reqs, authorizationHeader);
-    }
-
     private FieldResponse toResponse(Field f) {
         FieldResponse r = new FieldResponse();
         r.setId(f.getId());
         r.setName(f.getName());
         r.setType(f.getType());
         r.setVenueId(f.getVenue() != null ? f.getVenue().getId() : null);
-        // include price rules for this field
-        if (f.getId() != null) {
-            try {
-                r.setPriceRules(priceRuleService.listByField(f.getId()));
-            } catch (Exception e) {
-                // in case of any issue fetching rules, set empty list to avoid breaking response
-                r.setPriceRules(java.util.Collections.emptyList());
-            }
-        } else {
-            r.setPriceRules(java.util.Collections.emptyList());
-        }
+        r.setPricePerHour(f.getPricePerHour());
         return r;
     }
 }
