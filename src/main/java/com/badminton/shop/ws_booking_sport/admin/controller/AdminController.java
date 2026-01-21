@@ -78,4 +78,9 @@ public class AdminController {
         DashboardStatsResponse stats = adminService.getDashboardStats();
         return ResponseEntity.ok(DataResponse.success(stats, "Stats fetched", HttpStatus.OK.value()));
     }
+    @DeleteMapping("/venues/{id}")
+    public ResponseEntity<DataResponse> deleteVenue(@PathVariable Integer id) {
+        adminService.deleteVenue(id);
+        return ResponseEntity.ok(DataResponse.success(null, "Deleted venue successfully", HttpStatus.OK.value()));
+    }
 }

@@ -21,6 +21,13 @@ public class DataResponse implements Serializable {
     public static DataResponse success(Object metaData, String message, int code) {
         return DataResponse.builder().metaData(metaData).message(message).code(code).build();
     }
+    public static DataResponse success(String message) {
+        return DataResponse.builder()
+                .metaData(null)
+                .message(message)
+                .code(200)
+                .build();
+    }
 
     public static DataResponse error(String message, int code) {
         return DataResponse.builder().message(message).code(code).build();

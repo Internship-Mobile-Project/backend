@@ -56,17 +56,14 @@ public class AdminService {
 
         LocalDateTime sevenDaysAgo = LocalDateTime.now().minusDays(6).withHour(0).withMinute(0).withSecond(0);
 
-        // 1. Lấy dữ liệu thô (List<Object[]>)
         List<Object[]> userRaw = userRepository.getUserGrowthStats(sevenDaysAgo);
         List<Object[]> bookingRaw = bookingRepository.getBookingStats(sevenDaysAgo);
         List<Object[]> revenueRaw = bookingRepository.getRevenueStats(sevenDaysAgo);
 
-        // 2. Chuyển đổi sang ChartDataPoint và điền khuyết ngày
         List<ChartDataPoint> userChart = fillMissingDates(mapToChartData(userRaw));
         List<ChartDataPoint> bookingChart = fillMissingDates(mapToChartData(bookingRaw));
         List<ChartDataPoint> revenueChart = fillMissingDates(mapToChartData(revenueRaw));
 
-        // 3. Tính tổng doanh thu
         double totalRevenue7Days = revenueChart.stream()
                 .mapToDouble(point -> point.getValue().doubleValue())
                 .sum();
@@ -82,28 +79,22 @@ public class AdminService {
                 .build();
     }
 
-    // --- HÀM MỚI: Chuyển đổi Object[] sang ChartDataPoint ---
     private List<ChartDataPoint> mapToChartData(List<Object[]> rawData) {
         List<ChartDataPoint> result = new ArrayList<>();
         for (Object[] row : rawData) {
-            // row[0] là Date, row[1] là Value (Count hoặc Sum)
             LocalDate date = null;
 
-            // Xử lý an toàn cho Date
             if (row[0] instanceof java.sql.Date) {
                 date = ((java.sql.Date) row[0]).toLocalDate();
             } else if (row[0] instanceof java.util.Date) {
                 date = new java.sql.Date(((java.util.Date) row[0]).getTime()).toLocalDate();
             } else if (row[0] != null) {
-                // Trường hợp hiếm: String (tùy database)
                 date = LocalDate.parse(row[0].toString());
             }
 
-            // Xử lý an toàn cho Number
             Number value = (row[1] != null) ? (Number) row[1] : 0;
 
             if (date != null) {
-                // Bạn có thể dùng constructor mặc định và set
                 ChartDataPoint point = new ChartDataPoint();
                 point.setDate(date);
                 point.setValue(value);
@@ -113,9 +104,7 @@ public class AdminService {
         return result;
     }
 
-    // --- Giữ nguyên hàm fillMissingDates cũ ---
     private List<ChartDataPoint> fillMissingDates(List<ChartDataPoint> rawData) {
-        // ... (Code cũ giữ nguyên) ...
         Map<LocalDate, Number> dataMap = rawData.stream()
                 .collect(Collectors.toMap(ChartDataPoint::getDate, ChartDataPoint::getValue));
 
@@ -125,8 +114,14 @@ public class AdminService {
         for (int i = 6; i >= 0; i--) {
             LocalDate date = today.minusDays(i);
             Number value = dataMap.getOrDefault(date, 0);
-            filledData.add(new ChartDataPoint(date, value)); // Dùng constructor lombok @AllArgsConstructor
+            filledData.add(new ChartDataPoint(date, value));
         }
         return filledData;
+    }
+    public void deleteVenue(Integer venueId) {
+        Venue venue = venueRepository.findById(venueId)
+                .orElseThrow(() -> new ResourceUnavailableException("Venue not found with id: " + venueId));
+
+        venueRepository.delete(venue);
     }
 }
