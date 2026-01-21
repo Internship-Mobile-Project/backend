@@ -1,6 +1,7 @@
 package com.badminton.shop.ws_booking_sport.admin.controller;
 
 import com.badminton.shop.ws_booking_sport.admin.service.AdminService;
+import com.badminton.shop.ws_booking_sport.dto.response.DashboardStatsResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.DataResponse;
 import com.badminton.shop.ws_booking_sport.model.booking.Booking;
 import com.badminton.shop.ws_booking_sport.model.core.User;
@@ -70,5 +71,11 @@ public class AdminController {
         Page<Booking> bookings = adminService.getAllBookings(PageRequest.of(page, size));
         DataResponse body = DataResponse.success(bookings, "All bookings fetched", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<DataResponse> getDashboardStats() {
+        DashboardStatsResponse stats = adminService.getDashboardStats();
+        return ResponseEntity.ok(DataResponse.success(stats, "Stats fetched", HttpStatus.OK.value()));
     }
 }

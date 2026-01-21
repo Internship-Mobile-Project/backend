@@ -5,8 +5,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Entity(name = "users")
+@Entity
 @Data
+@Table(name = "users")
 @NoArgsConstructor
 @AllArgsConstructor
 @Inheritance(strategy = InheritanceType.JOINED)
