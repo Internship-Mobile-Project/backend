@@ -6,6 +6,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,20 @@ public class JwtService {
 
     @Value("${jwt.refreshExpiration}")
     private long jwtRefreshExpirationMs;
+
+    @PostConstruct
+    void validateConfig() {
+        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            throw new IllegalStateException("Missing JWT secret. Set env var JWT_SECRET (or 'jwt.secret' property).");
+        }
+
+        int secretBytes = jwtSecret.getBytes(StandardCharsets.UTF_8).length;
+        if (secretBytes < 32) {
+            throw new IllegalStateException(
+                    "JWT secret too short for HS256. Provide at least 32 bytes (recommended: 64+)."
+            );
+        }
+    }
 
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
