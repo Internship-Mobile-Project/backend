@@ -18,6 +18,7 @@ public class ChatRoom {
 
     private String userId;
     private String ownerId;
+    private String friendId;
 
     @Enumerated(EnumType.STRING)
     private ChatStatus status;
@@ -28,4 +29,3 @@ public class ChatRoom {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
-

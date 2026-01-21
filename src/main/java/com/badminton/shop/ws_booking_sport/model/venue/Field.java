@@ -18,6 +18,5 @@ public class Field {
     @ManyToOne
     private Venue venue;
 
-    // Single price per hour for the whole field
-    private Double pricePerHour;
+    // pricePerHour moved to Venue (venue-level price)
 }

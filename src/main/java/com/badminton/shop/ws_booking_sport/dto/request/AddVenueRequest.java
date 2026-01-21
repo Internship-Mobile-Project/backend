@@ -13,4 +13,5 @@ public class AddVenueRequest {
     private LocalTime timeOpen;
     private LocalTime timeClose;
     private String sport; // e.g. badminton, multiSport
+    private Double pricePerHour; // venue-level price
 }

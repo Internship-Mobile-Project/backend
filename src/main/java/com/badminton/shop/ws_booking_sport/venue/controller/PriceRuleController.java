@@ -10,8 +10,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class PriceRuleController {
 
-    // All price rule endpoints have been removed in favor of a single pricePerHour on Field.
-    private static final String MESSAGE = "PriceRule API removed. Use Field.pricePerHour instead.";
+    // PriceRule API removed; price is now stored at Venue level (venue.pricePerHour)
+    private static final String MESSAGE = "PriceRule API removed. Use Venue.pricePerHour instead.";
 
     @RequestMapping(value = "/api/fields/{fieldId}/pricerules", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
     public ResponseEntity<DataResponse> unavailableForField(@PathVariable(required = false) Integer fieldId) {

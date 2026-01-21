@@ -71,7 +71,6 @@ public class FieldService {
         f.setName(req.getName());
         f.setType(req.getType());
         f.setVenue(venue);
-        f.setPricePerHour(req.getPricePerHour());
 
         Field saved = fieldRepository.save(f);
         return toResponse(saved);
@@ -97,7 +96,6 @@ public class FieldService {
 
         if (req.getName() != null) f.setName(req.getName());
         if (req.getType() != null) f.setType(req.getType());
-        if (req.getPricePerHour() != null) f.setPricePerHour(req.getPricePerHour());
 
         Field saved = fieldRepository.save(f);
         return toResponse(saved);
@@ -129,7 +127,6 @@ public class FieldService {
         r.setName(f.getName());
         r.setType(f.getType());
         r.setVenueId(f.getVenue() != null ? f.getVenue().getId() : null);
-        r.setPricePerHour(f.getPricePerHour());
         return r;
     }
 }

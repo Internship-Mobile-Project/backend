@@ -14,5 +14,5 @@ public class VenuesResponse {
     private Double longitude;
     private Double distanceKm;
     private Double minPricePerHour; // optional
+    private double pricePerHour; // explicit price per hour to return to clients
 }
-

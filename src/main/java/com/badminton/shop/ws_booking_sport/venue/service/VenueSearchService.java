@@ -6,7 +6,6 @@ import com.badminton.shop.ws_booking_sport.goong.GoongResponse;
 import com.badminton.shop.ws_booking_sport.model.action.AreaSearchFilter;
 import com.badminton.shop.ws_booking_sport.model.action.LocationSearchFilter;
 import com.badminton.shop.ws_booking_sport.model.action.SearchFilter;
-import com.badminton.shop.ws_booking_sport.model.venue.Field;
 import com.badminton.shop.ws_booking_sport.model.venue.Venue;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueRepository;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueSpecifications;
@@ -79,7 +78,7 @@ public class VenueSearchService {
         List<Venue> venues = venueRepository.findAll(spec);
         if (venues.isEmpty()) return Collections.emptyList();
 
-        // Map to response and compute min price per venue
+        // Map to response and set pricePerHour from venue
         List<VenuesResponse> resp = new ArrayList<>();
         for (Venue v : venues) {
             VenuesResponse vr = new VenuesResponse();
@@ -92,17 +91,10 @@ public class VenueSearchService {
             vr.setLongitude(v.getAddress() != null ? v.getAddress().getLongitude() : null);
             vr.setDistanceKm(idToDistance.get(v.getId()));
 
-            // compute min price per hour across fields.pricePerHour
-            Double minPrice = null;
-            if (v.getFields() != null) {
-                for (Field f : v.getFields()) {
-                    Double pval = f.getPricePerHour();
-                    if (pval != null) {
-                        if (minPrice == null || pval < minPrice) minPrice = pval;
-                    }
-                }
-            }
-            vr.setMinPricePerHour(minPrice);
+            // price now stored at venue level
+            Double price = v.getPricePerHour();
+            vr.setMinPricePerHour(price);
+            vr.setPricePerHour(price != null ? price : 0.0);
             resp.add(vr);
         }
 

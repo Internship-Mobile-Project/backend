@@ -17,6 +17,7 @@ public class User {
 
     private String name;
     private String phone;
+    @Column(name = "avatar_url", length = 1024)
     private String avatarUrl;
     private String backgroundUrl;
     private boolean active;

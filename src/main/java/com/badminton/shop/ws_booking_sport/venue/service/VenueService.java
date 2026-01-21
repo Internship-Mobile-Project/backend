@@ -95,6 +95,11 @@ public class VenueService {
         v.setCreatedAt(LocalDateTime.now());
         v.setUpdatedAt(LocalDateTime.now());
 
+        // set venue-level price if provided
+        if (req.getPricePerHour() != null) {
+            v.setPricePerHour(req.getPricePerHour());
+        }
+
         AddressRequest addrReq = req.getAddress();
         if (addrReq != null) {
             Address address = new Address(addrReq);
@@ -225,6 +230,7 @@ public class VenueService {
         if (req.getSport() != null) v.setSport(req.getSport());
         if (req.getTimeOpen() != null) v.setTimeOpen(req.getTimeOpen());
         if (req.getTimeClose() != null) v.setTimeClose(req.getTimeClose());
+        if (req.getPricePerHour() != null) v.setPricePerHour(req.getPricePerHour());
 
         AddressRequest addrReq = req.getAddress();
         if (addrReq != null) {
@@ -368,6 +374,10 @@ public class VenueService {
         resp.setRating(v.getRating());
         resp.setCreatedAt(v.getCreatedAt());
         resp.setUpdatedAt(v.getUpdatedAt());
+
+        // price is now stored on Venue level
+        double price = v.getPricePerHour() != null ? v.getPricePerHour() : 0.0;
+        resp.setPricePerHour(price);
         return resp;
     }
 }

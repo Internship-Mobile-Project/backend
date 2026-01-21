@@ -8,6 +8,4 @@ public class UpdatePriceRuleRequest {
     private Integer dayOfWeek;
     private LocalTime startTime;
     private LocalTime endTime;
-    private Double pricePerHour;
 }
-

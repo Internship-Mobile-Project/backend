@@ -8,6 +8,5 @@ public class FieldResponse {
     private String name;
     private String type;
     private Integer venueId;
-    // single price per hour
-    private Double pricePerHour;
+    // pricePerHour moved to Venue level
 }

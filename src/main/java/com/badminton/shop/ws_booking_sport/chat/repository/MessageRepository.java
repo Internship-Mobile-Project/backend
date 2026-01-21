@@ -9,5 +9,7 @@ import java.util.List;
 @Repository
 public interface MessageRepository extends JpaRepository<Message, Integer> {
     List<Message> findByChatRoomIdOrderBySentAtAsc(String chatRoomId);
-}
 
+    // Fetch the latest message for preview
+    Message findTopByChatRoomIdOrderBySentAtDesc(String chatRoomId);
+}

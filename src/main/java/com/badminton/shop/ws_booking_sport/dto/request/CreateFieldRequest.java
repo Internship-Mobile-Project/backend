@@ -6,5 +6,4 @@ import lombok.Data;
 public class CreateFieldRequest {
     private String name;
     private String type;
-    private Double pricePerHour;
 }

@@ -117,13 +117,13 @@ public class BookingService {
         long totalRequestedMinutes = Duration.between(start, end).toMinutes();
         if (totalRequestedMinutes <= 0) throw new IllegalArgumentException("Invalid booking duration");
 
-        // compute total price using single pricePerHour on Field
-        Double fieldPricePerHour = field.getPricePerHour();
-        if (fieldPricePerHour == null) throw new IllegalArgumentException("Field pricePerHour is not set");
+        // compute total price using venue-level pricePerHour (moved from field to venue)
+        Double venuePricePerHour = field.getVenue() != null ? field.getVenue().getPricePerHour() : null;
+        if (venuePricePerHour == null) throw new IllegalArgumentException("Venue pricePerHour is not set");
 
-        double totalPrice = (totalRequestedMinutes / 60.0) * fieldPricePerHour;
+        double totalPrice = (totalRequestedMinutes / 60.0) * venuePricePerHour;
 
-        // create slot entities per 30-minute chunks and compute per-slot price proportional to field price
+        // create slot entities per 30-minute chunks and compute per-slot price proportional to venue price
         List<Slot> slotsToSave = new ArrayList<>();
         LocalTime cursor = start;
         while (cursor.isBefore(end)) {
@@ -131,7 +131,7 @@ public class BookingService {
             if (slotEnd.isAfter(end)) slotEnd = end;
 
             long minutes = Duration.between(cursor, slotEnd).toMinutes();
-            double slotPrice = (minutes / 60.0) * fieldPricePerHour;
+            double slotPrice = (minutes / 60.0) * venuePricePerHour;
 
             Slot s = new Slot();
             s.setDate(date);
