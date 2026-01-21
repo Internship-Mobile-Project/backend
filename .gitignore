@@ -45,3 +45,8 @@ Thumbs.db
 # --- Các file log ---
 *.log
 *.log.*
+
+# --- Local env (secrets) ---
+.env
+.env.local
+env.local.sh
