@@ -1,6 +1,7 @@
 package com.badminton.shop.ws_booking_sport.model.chat;
 
-import com.badminton.shop.ws_booking_sport.enums.ChatStatus;
+import com.badminton.shop.ws_booking_sport.enums.RoomStatus;
+import com.badminton.shop.ws_booking_sport.model.core.Admin;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -21,7 +22,7 @@ public class ChatRoom {
     private String friendId;
 
     @Enumerated(EnumType.STRING)
-    private ChatStatus status;
+    private RoomStatus status;
 
     @OneToMany(mappedBy = "chatRoom", cascade = CascadeType.ALL)
     private List<Message> messages;

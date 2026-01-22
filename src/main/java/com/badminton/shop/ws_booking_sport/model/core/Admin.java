@@ -8,5 +8,5 @@ import lombok.*;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 public class Admin extends User {
-    // Admin có thể có thêm quyền trong tương lai
+
 }
