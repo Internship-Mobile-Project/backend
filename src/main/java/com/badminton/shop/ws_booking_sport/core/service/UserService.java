@@ -632,10 +632,8 @@ public class UserService {
             if (!addressParts.isEmpty()) {
                 String fullAddressToGeocode = String.join(", ", addressParts);
                 try {
-                    GoongResponse.Location location = goongMapService.getGeoLocation(fullAddressToGeocode);
-
+                    GoongResponse.GoongLocation location = goongMapService.getGeoLocation(fullAddressToGeocode);
                     if (location != null) {
-                        // Cập nhật tọa độ mới vào object
                         currentAddr.setLatitude(location.getLat());
                         currentAddr.setLongitude(location.getLng());
                     }
@@ -808,5 +806,73 @@ public class UserService {
         accountRepository.save(account);
 
         return "Password reset";
+    }
+
+    @Transactional
+    public String updateAvatar(String authorizationHeader, String avatarUrl) {
+        if (avatarUrl == null || avatarUrl.isBlank()) throw new IllegalArgumentException("Avatar URL is required");
+
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        if (!authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        String email = jwtService.extractEmail(token);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Token does not contain email");
+        }
+
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        User user = account.getUser();
+        if (user == null) {
+            throw new IllegalArgumentException("Associated user not found");
+        }
+
+        user.setAvatarUrl(avatarUrl);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        return "Avatar updated successfully";
+    }
+
+    @Transactional
+    public String deleteAvatar(String authorizationHeader) {
+        if (authorizationHeader == null || authorizationHeader.isBlank()) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        if (!authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        String email = jwtService.extractEmail(token);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Token does not contain email");
+        }
+
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Account not found"));
+
+        User user = account.getUser();
+        if (user == null) {
+            throw new IllegalArgumentException("Associated user not found");
+        }
+
+        user.setAvatarUrl(null);
+        user.setUpdatedAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        return "Avatar deleted successfully";
     }
 }

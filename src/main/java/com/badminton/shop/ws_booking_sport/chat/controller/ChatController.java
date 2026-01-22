@@ -101,9 +101,28 @@ public class ChatController {
         if (!jwtService.isTokenValid(token)) {
             throw new IllegalArgumentException("Invalid or expired token");
         }
-        var msgs = chatService.listMessages(chatRoomId);
-        DataResponse body = DataResponse.success(msgs, "Messages fetched", HttpStatus.OK.value());
-        return ResponseEntity.ok(body);
+
+        var messages = chatService.listMessages(chatRoomId);
+        return ResponseEntity.ok(DataResponse.success(messages, "Messages fetched successfully", HttpStatus.OK.value()));
+    }
+
+    // Get all chat rooms for current user (Inbox)
+    @GetMapping
+    public ResponseEntity<DataResponse> getMyChatRooms(@RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Authorization header with Bearer token is required");
+        }
+        String token = authorizationHeader.substring(7);
+        if (!jwtService.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+        String subject = jwtService.extractSubject(token);
+        if (subject == null || subject.isBlank()) throw new IllegalArgumentException("Token does not contain user id");
+        int userId;
+        try { userId = Integer.parseInt(subject); } catch (NumberFormatException ex) { throw new IllegalArgumentException("Invalid user id in token subject"); }
+
+        var rooms = chatService.getChatRoomsForUser(userId);
+        return ResponseEntity.ok(DataResponse.success(rooms, "Chat rooms fetched successfully", HttpStatus.OK.value()));
     }
 
     // get chat room details

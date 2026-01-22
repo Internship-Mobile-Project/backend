@@ -15,9 +15,9 @@ public class ChatRoomResponse {
     private String id;
     private String userId;
     private String ownerId;
+    private String friendId;
     private ChatStatus status;
     private List<MessageResponse> messages;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
-

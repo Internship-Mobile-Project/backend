@@ -36,6 +36,9 @@ public class Venue {
     @OneToMany(mappedBy = "venue", cascade = CascadeType.ALL)
     private List<Field> fields;
 
+    // Move pricePerHour from Field to Venue (venue-level single price)
+    private Double pricePerHour;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

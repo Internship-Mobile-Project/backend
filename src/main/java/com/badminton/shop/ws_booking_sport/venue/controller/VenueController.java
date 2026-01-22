@@ -10,6 +10,7 @@ import com.badminton.shop.ws_booking_sport.dto.response.FieldResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.VenueDetailResponse;
 import com.badminton.shop.ws_booking_sport.venue.service.VenueService;
 import com.badminton.shop.ws_booking_sport.dto.response.ReviewResponse;
+import com.badminton.shop.ws_booking_sport.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,7 @@ import java.util.List;
 public class VenueController {
 
     private final VenueService venueService;
+    private final JwtService jwtService; // Need this to extract user ID for favorites
 
     @PostMapping
     public ResponseEntity<DataResponse> createVenue(@RequestBody AddVenueRequest req, HttpServletRequest request) {
@@ -33,17 +35,16 @@ public class VenueController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<DataResponse> getVenue(@PathVariable Integer id) {
-        VenueResponse resp = venueService.getVenue(id);
-        DataResponse body = DataResponse.success(resp, "Venue fetched", HttpStatus.OK.value());
-        return ResponseEntity.ok(body);
-    }
-
-    // new: detailed venue info for FE
-    @GetMapping("/{id}/detail")
     public ResponseEntity<DataResponse> getVenueDetail(@PathVariable Integer id) {
         VenueDetailResponse resp = venueService.getVenueDetail(id);
         DataResponse body = DataResponse.success(resp, "Venue detail fetched", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    @GetMapping("/sport/{sportName}")
+    public ResponseEntity<DataResponse> getVenuesBySport(@PathVariable String sportName) {
+        List<VenueResponse> resp = venueService.getVenuesBySport(sportName);
+        DataResponse body = DataResponse.success(resp, "Venues fetched by sport", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
 
@@ -117,5 +118,43 @@ public class VenueController {
         var pageResp = venueService.getReviewsPaginated(venueId, page, size);
         DataResponse body = DataResponse.success(pageResp, "Reviews fetched", HttpStatus.OK.value());
         return ResponseEntity.ok(body);
+    }
+
+    // LIST FAVORITE VENUES
+    @GetMapping("/favorites")
+    public ResponseEntity<DataResponse> getFavorites(HttpServletRequest request) {
+        Integer userId = extractUserId(request);
+        List<VenueResponse> list = venueService.getFavoriteVenues(userId);
+        return ResponseEntity.ok(DataResponse.success(list, "Favorite venues fetched", HttpStatus.OK.value()));
+    }
+
+    // ADD FAVORITE
+    @PostMapping("/{id}/favorite")
+    public ResponseEntity<DataResponse> addFavorite(@PathVariable("id") Integer venueId, HttpServletRequest request) {
+        Integer userId = extractUserId(request);
+        venueService.addFavorite(userId, venueId);
+        return ResponseEntity.ok(DataResponse.success(null, "Venue added to favorites", HttpStatus.OK.value()));
+    }
+
+    // REMOVE FAVORITE
+    @DeleteMapping("/{id}/favorite")
+    public ResponseEntity<DataResponse> removeFavorite(@PathVariable("id") Integer venueId, HttpServletRequest request) {
+        Integer userId = extractUserId(request);
+        venueService.removeFavorite(userId, venueId);
+        return ResponseEntity.ok(DataResponse.success(null, "Venue removed from favorites", HttpStatus.OK.value()));
+    }
+
+    private Integer extractUserId(HttpServletRequest request) {
+        String auth = request.getHeader("Authorization");
+        if (auth == null || !auth.startsWith("Bearer ")) {
+            throw new IllegalArgumentException("Authorization header is required");
+        }
+        String token = auth.substring(7);
+        String subject = jwtService.extractSubject(token); // subject is userId
+        try {
+            return Integer.parseInt(subject);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid user ID in token");
+        }
     }
 }

@@ -18,10 +18,8 @@ public class ChatRoom {
     private String id;
 
     private String userId;
-
-    @ManyToOne
-    @JoinColumn(name = "admin_id", nullable = true)
-    private Admin admin;
+    private String ownerId;
+    private String friendId;
 
     @Enumerated(EnumType.STRING)
     private RoomStatus status;
@@ -32,4 +30,3 @@ public class ChatRoom {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
-

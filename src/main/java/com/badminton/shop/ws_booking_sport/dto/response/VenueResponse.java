@@ -21,4 +21,5 @@ public class VenueResponse {
     private float rating;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private double pricePerHour;
 }

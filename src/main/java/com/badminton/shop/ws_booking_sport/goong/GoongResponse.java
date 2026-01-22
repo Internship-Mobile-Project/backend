@@ -19,12 +19,12 @@ public class GoongResponse {
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Geometry {
-        private Location location;
+        private GoongLocation location;
     }
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Location {
+    public static class GoongLocation {
         // Use double for higher precision
         private double lat;
         private double lng;

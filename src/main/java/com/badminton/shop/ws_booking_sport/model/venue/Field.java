@@ -2,7 +2,6 @@ package com.badminton.shop.ws_booking_sport.model.venue;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.util.List;
 
 @Entity
 @Data
@@ -19,6 +18,5 @@ public class Field {
     @ManyToOne
     private Venue venue;
 
-    @OneToMany(mappedBy = "field", cascade = CascadeType.ALL)
-    private List<PriceRule> priceRules;
+    // pricePerHour moved to Venue (venue-level price)
 }

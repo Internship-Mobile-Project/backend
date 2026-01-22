@@ -2,6 +2,8 @@ package com.badminton.shop.ws_booking_sport.booking.repository;
 
 import com.badminton.shop.ws_booking_sport.dto.response.ChartDataPoint;
 import com.badminton.shop.ws_booking_sport.model.booking.Booking;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,4 +28,8 @@ public interface BookingRepository extends JpaRepository<Booking, String> {
             "GROUP BY DATE(b.booked_at) " +
             "ORDER BY DATE(b.booked_at) ASC", nativeQuery = true)
     List<Object[]> getRevenueStats(@Param("startDate") LocalDateTime startDate);
+
+    // Find bookings by customer ID (user ID), ordered by newest first
+    Page<Booking> findByCustomerIdOrderByCreatedAtDesc(Integer customerId, Pageable pageable);
 }
+

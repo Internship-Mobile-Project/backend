@@ -7,4 +7,3 @@ public class UpdateFieldRequest {
     private String name;
     private String type;
 }
-

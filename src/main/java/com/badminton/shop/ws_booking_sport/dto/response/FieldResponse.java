@@ -1,7 +1,6 @@
 package com.badminton.shop.ws_booking_sport.dto.response;
 
 import lombok.Data;
-import java.util.List;
 
 @Data
 public class FieldResponse {
@@ -9,6 +8,5 @@ public class FieldResponse {
     private String name;
     private String type;
     private Integer venueId;
-    // include price rules associated with this field
-    private List<PriceRuleResponse> priceRules;
+    // pricePerHour moved to Venue level
 }

@@ -12,5 +12,5 @@ public class UpdateVenueRequest {
     private LocalTime timeOpen;
     private LocalTime timeClose;
     private String sport;
+    private Double pricePerHour; // venue-level price (optional)
 }
-

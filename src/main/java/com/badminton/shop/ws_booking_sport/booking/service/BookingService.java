@@ -18,13 +18,17 @@ import com.badminton.shop.ws_booking_sport.model.core.Account;
 import com.badminton.shop.ws_booking_sport.model.core.Customer;
 import com.badminton.shop.ws_booking_sport.model.core.User;
 import com.badminton.shop.ws_booking_sport.model.venue.Field;
-import com.badminton.shop.ws_booking_sport.model.venue.PriceRule;
 import com.badminton.shop.ws_booking_sport.model.venue.Slot;
 import com.badminton.shop.ws_booking_sport.venue.repository.FieldRepository;
-import com.badminton.shop.ws_booking_sport.venue.repository.PriceRuleRepository;
+import com.badminton.shop.ws_booking_sport.notification.service.NotificationService;
+import com.badminton.shop.ws_booking_sport.enums.NotificationType;
+import com.badminton.shop.ws_booking_sport.enums.RecipientType;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,11 +48,11 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final SlotRepository slotRepository;
-    private final PriceRuleRepository priceRuleRepository;
     private final FieldRepository fieldRepository;
     private final CustomerRepository customerRepository;
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public Booking createBooking(BookingRequest req) {
@@ -91,6 +95,27 @@ public class BookingService {
         return createBookingWithCustomer(req, customer);
     }
 
+    // New: initiate online payment (returns redirect url)
+    @Transactional
+    public String initiateOnlinePayment(String bookingId, Integer userId) {
+        Booking booking = bookingRepository.findById(bookingId).orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+        if (booking.getCustomer() == null || !booking.getCustomer().getId().equals(userId)) {
+            throw new IllegalArgumentException("Only the customer who created the booking can initiate its online payment");
+        }
+        if (!(booking.getPayment() instanceof OnlinePayment)) {
+            throw new IllegalArgumentException("Payment for this booking is not an online payment");
+        }
+        OnlinePayment op = (OnlinePayment) booking.getPayment();
+        return op.getRedirectUrl();
+    }
+
+    // New: get booking history for a user
+    public Page<BookingResponse> getBookingHistory(Integer userId, int page, int size) {
+        Pageable p = PageRequest.of(page, size);
+        Page<Booking> bookings = bookingRepository.findByCustomerIdOrderByCreatedAtDesc(userId, p);
+        return bookings.map(this::toBookingResponse);
+    }
+
     // internal: booking flow when customer is already resolved
     private Booking createBookingWithCustomer(BookingRequest req, Customer customer) {
         if (req == null) throw new IllegalArgumentException("Request body is required");
@@ -117,54 +142,24 @@ public class BookingService {
             throw new ResourceUnavailableException("Requested time range overlaps with existing bookings or slots");
         }
 
-        // load price rules for the field
-        List<PriceRule> rules = priceRuleRepository.findByFieldId(fieldId);
-        int dayOfWeek = date.getDayOfWeek().getValue(); // 1=Mon .. 7=Sun
-
         long totalRequestedMinutes = Duration.between(start, end).toMinutes();
         if (totalRequestedMinutes <= 0) throw new IllegalArgumentException("Invalid booking duration");
 
-        // calculate total price by summing overlap between request interval and each price rule for the day
-        double totalPrice = 0.0;
-        long coveredMinutes = 0;
+        // compute total price using venue-level pricePerHour (moved from field to venue)
+        Double venuePricePerHour = field.getVenue() != null ? field.getVenue().getPricePerHour() : null;
+        if (venuePricePerHour == null) throw new IllegalArgumentException("Venue pricePerHour is not set");
 
-        for (PriceRule pr : rules) {
-            if (pr.getDayOfWeek() != dayOfWeek) continue;
-            LocalTime ruleStart = pr.getStartTime();
-            LocalTime ruleEnd = pr.getEndTime();
+        double totalPrice = (totalRequestedMinutes / 60.0) * venuePricePerHour;
 
-            // compute overlap between [start,end) and [ruleStart,ruleEnd)
-            LocalTime overlapStart = start.isAfter(ruleStart) ? start : ruleStart;
-            LocalTime overlapEnd = end.isBefore(ruleEnd) ? end : ruleEnd;
-            if (overlapStart.isBefore(overlapEnd)) {
-                long minutes = Duration.between(overlapStart, overlapEnd).toMinutes();
-                coveredMinutes += minutes;
-                totalPrice += (minutes / 60.0) * pr.getPricePerHour();
-            }
-        }
-
-        if (coveredMinutes < totalRequestedMinutes) {
-            throw new IllegalArgumentException("Price rules do not cover the entire booking period");
-        }
-
-        // create slot entities per 30-minute chunks and compute per-slot price proportional to rules
+        // create slot entities per 30-minute chunks and compute per-slot price proportional to venue price
         List<Slot> slotsToSave = new ArrayList<>();
         LocalTime cursor = start;
         while (cursor.isBefore(end)) {
             LocalTime slotEnd = cursor.plusMinutes(30);
             if (slotEnd.isAfter(end)) slotEnd = end;
 
-            // compute price for this slot by checking overlaps with rules
-            double slotPrice = 0.0;
-            for (PriceRule pr : rules) {
-                if (pr.getDayOfWeek() != dayOfWeek) continue;
-                LocalTime overlapStart = cursor.isAfter(pr.getStartTime()) ? cursor : pr.getStartTime();
-                LocalTime overlapEnd = slotEnd.isBefore(pr.getEndTime()) ? slotEnd : pr.getEndTime();
-                if (overlapStart.isBefore(overlapEnd)) {
-                    long minutes = Duration.between(overlapStart, overlapEnd).toMinutes();
-                    slotPrice += (minutes / 60.0) * pr.getPricePerHour();
-                }
-            }
+            long minutes = Duration.between(cursor, slotEnd).toMinutes();
+            double slotPrice = (minutes / 60.0) * venuePricePerHour;
 
             Slot s = new Slot();
             s.setDate(date);
@@ -216,23 +211,32 @@ public class BookingService {
                 op.setBooking(booking);
                 booking.setPayment(op);
             }
+        } else {
+            // Default to CASH if not specified? Or throw error.
+            // Existing logic seems to imply optional payment.
         }
 
-        Booking saved = bookingRepository.save(booking);
+        Booking savedBooking = bookingRepository.save(booking);
 
-        // if online payment created we should replace placeholder bookingId in redirectUrl
-        if (saved.getPayment() instanceof OnlinePayment) {
-            OnlinePayment op = (OnlinePayment) saved.getPayment();
-            String redirect = op.getRedirectUrl();
-            if (redirect != null && redirect.contains("{bookingId}")) {
-                redirect = redirect.replace("{bookingId}", saved.getId());
-                op.setRedirectUrl(redirect);
-                // save updated payment
-                bookingRepository.save(saved);
-            }
+        // Notify user about successful booking
+        try {
+            String message = "Bạn đã đặt sân " + field.getName() + " tại " +
+                             (field.getVenue() != null ? field.getVenue().getName() : "Sân cầu lông") +
+                             " thành công. Mã đặt sân: " + savedBooking.getId();
+            notificationService.createNotification(
+                    String.valueOf(customer.getId()),
+                    RecipientType.USER,
+                    NotificationType.BOOKING,
+                    "Đặt sân thành công",
+                    message,
+                    "BOOKING",
+                    savedBooking.getId()
+            );
+        } catch (Exception e) {
+            log.error("Failed to create notification for booking: {}", savedBooking.getId(), e);
         }
 
-        return saved;
+        return savedBooking;
     }
 
     // keep existing helper for backward compatible path
@@ -335,19 +339,5 @@ public class BookingService {
         }
         booking.setUpdatedAt(LocalDateTime.now());
         return bookingRepository.save(booking);
-    }
-
-    // Customer initiates online payment (returns redirect url)
-    @Transactional(readOnly = true)
-    public String initiateOnlinePayment(String bookingId, Integer customerId) {
-        Booking booking = bookingRepository.findById(bookingId).orElseThrow(() -> new IllegalArgumentException("Booking not found"));
-        if (booking.getCustomer() == null || !booking.getCustomer().getId().equals(customerId)) {
-            throw new IllegalArgumentException("Only the customer who created the booking can initiate its online payment");
-        }
-        if (!(booking.getPayment() instanceof OnlinePayment)) {
-            throw new IllegalArgumentException("Payment for this booking is not an online payment");
-        }
-        OnlinePayment op = (OnlinePayment) booking.getPayment();
-        return op.getRedirectUrl();
     }
 }

@@ -6,8 +6,6 @@ import com.badminton.shop.ws_booking_sport.goong.GoongResponse;
 import com.badminton.shop.ws_booking_sport.model.action.AreaSearchFilter;
 import com.badminton.shop.ws_booking_sport.model.action.LocationSearchFilter;
 import com.badminton.shop.ws_booking_sport.model.action.SearchFilter;
-import com.badminton.shop.ws_booking_sport.model.venue.Field;
-import com.badminton.shop.ws_booking_sport.model.venue.PriceRule;
 import com.badminton.shop.ws_booking_sport.model.venue.Venue;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueRepository;
 import com.badminton.shop.ws_booking_sport.venue.repository.VenueSpecifications;
@@ -42,7 +40,7 @@ public class VenueSearchService {
         } else if (filter instanceof AreaSearchFilter) {
             AreaSearchFilter af = (AreaSearchFilter) filter;
             String q = (af.getDistrict() != null && !af.getDistrict().isBlank()) ? af.getDistrict() + ", " + af.getCity() : af.getCity();
-            GoongResponse.Location loc = null;
+            GoongResponse.GoongLocation loc = null;
             try {
                 loc = goongMapService.getGeoLocation(q);
             } catch (Exception e) {
@@ -80,7 +78,7 @@ public class VenueSearchService {
         List<Venue> venues = venueRepository.findAll(spec);
         if (venues.isEmpty()) return Collections.emptyList();
 
-        // Map to response and compute min price per venue
+        // Map to response and set pricePerHour from venue
         List<VenuesResponse> resp = new ArrayList<>();
         for (Venue v : venues) {
             VenuesResponse vr = new VenuesResponse();
@@ -93,19 +91,10 @@ public class VenueSearchService {
             vr.setLongitude(v.getAddress() != null ? v.getAddress().getLongitude() : null);
             vr.setDistanceKm(idToDistance.get(v.getId()));
 
-            // compute min price per hour across fields.priceRules
-            Double minPrice = null;
-            if (v.getFields() != null) {
-                for (Field f : v.getFields()) {
-                    if (f.getPriceRules() != null) {
-                        for (PriceRule pr : f.getPriceRules()) {
-                            double pval = pr.getPricePerHour();
-                            if (minPrice == null || pval < minPrice) minPrice = pval;
-                        }
-                    }
-                }
-            }
-            vr.setMinPricePerHour(minPrice);
+            // price now stored at venue level
+            Double price = v.getPricePerHour();
+            vr.setMinPricePerHour(price);
+            vr.setPricePerHour(price != null ? price : 0.0);
             resp.add(vr);
         }
 
@@ -145,7 +134,7 @@ public class VenueSearchService {
         } else if (filter instanceof AreaSearchFilter) {
             AreaSearchFilter af = (AreaSearchFilter) filter;
             String q = (af.getDistrict() != null && !af.getDistrict().isBlank()) ? af.getDistrict() + ", " + af.getCity() : af.getCity();
-            GoongResponse.Location loc = goongMapService.getGeoLocation(q);
+            GoongResponse.GoongLocation loc = goongMapService.getGeoLocation(q);
             if (loc != null) {
                 centerLat = loc.getLat(); centerLng = loc.getLng(); radiusKm = 20.0;
             }
@@ -201,5 +190,3 @@ public class VenueSearchService {
         return null;
     }
 }
-
-

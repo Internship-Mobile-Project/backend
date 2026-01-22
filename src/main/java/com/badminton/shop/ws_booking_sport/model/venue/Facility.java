@@ -15,4 +15,7 @@ public class Facility {
     private String name;
     private String description;
     private double price;
+
+    @ManyToOne
+    private Venue venue;
 }

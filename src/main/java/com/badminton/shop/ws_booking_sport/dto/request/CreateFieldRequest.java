@@ -7,4 +7,3 @@ public class CreateFieldRequest {
     private String name;
     private String type;
 }
-

@@ -133,10 +133,12 @@ public class GoongPlacesService {
 
             logger.info("Calling Goong geocode: {}", uri);
             ResponseEntity<GoongResponse> resp = restTemplate.getForEntity(uri, GoongResponse.class);
-            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null && resp.getBody().getResults() != null && !resp.getBody().getResults().isEmpty()) {
-                GoongResponse.Location loc = resp.getBody().getResults().get(0).getGeometry().getLocation();
-                // then call nearbysearch with a reasonable radius (e.g., 20km)
-                return searchNearby(loc.getLat(), loc.getLng(), 20.0, keywords);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                if ("OK".equals(resp.getBody().getStatus()) && resp.getBody().getResults() != null && !resp.getBody().getResults().isEmpty()) {
+                    GoongResponse.GoongLocation loc = resp.getBody().getResults().get(0).getGeometry().getLocation();
+                    // then call nearbysearch with a reasonable radius (e.g., 20km)
+                    return searchNearby(loc.getLat(), loc.getLng(), 20.0, keywords);
+                }
             }
         } catch (HttpClientErrorException he) {
             logger.warn("Goong geocode returned {} for city/district {} / {} ; body={}", he.getStatusCode(), city, district, he.getResponseBodyAsString());
