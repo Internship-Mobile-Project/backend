@@ -40,7 +40,7 @@ public class VenueSearchService {
         } else if (filter instanceof AreaSearchFilter) {
             AreaSearchFilter af = (AreaSearchFilter) filter;
             String q = (af.getDistrict() != null && !af.getDistrict().isBlank()) ? af.getDistrict() + ", " + af.getCity() : af.getCity();
-            GoongResponse.Location loc = null;
+            GoongResponse.GoongLocation loc = null;
             try {
                 loc = goongMapService.getGeoLocation(q);
             } catch (Exception e) {
@@ -134,7 +134,7 @@ public class VenueSearchService {
         } else if (filter instanceof AreaSearchFilter) {
             AreaSearchFilter af = (AreaSearchFilter) filter;
             String q = (af.getDistrict() != null && !af.getDistrict().isBlank()) ? af.getDistrict() + ", " + af.getCity() : af.getCity();
-            GoongResponse.Location loc = goongMapService.getGeoLocation(q);
+            GoongResponse.GoongLocation loc = goongMapService.getGeoLocation(q);
             if (loc != null) {
                 centerLat = loc.getLat(); centerLng = loc.getLng(); radiusKm = 20.0;
             }

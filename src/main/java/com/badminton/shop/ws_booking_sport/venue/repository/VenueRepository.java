@@ -12,6 +12,7 @@ import java.util.List;
 @Repository
 public interface VenueRepository extends JpaRepository<Venue, Integer>, JpaSpecificationExecutor<Venue> {
     List<Venue> findByOwnerId(Integer ownerId);
+    List<Venue> findBySportContainingIgnoreCase(String sport);
 
     // Projection interface for native query
     interface VenueDistanceProjection {

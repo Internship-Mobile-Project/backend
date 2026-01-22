@@ -2,6 +2,7 @@ package com.badminton.shop.ws_booking_sport.core.controller;
 
 import com.badminton.shop.ws_booking_sport.core.service.UserService;
 import com.badminton.shop.ws_booking_sport.dto.request.UpdateUserRequest;
+import com.badminton.shop.ws_booking_sport.dto.request.UpdateAvatarRequest;
 import com.badminton.shop.ws_booking_sport.dto.response.UserPublicResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.MeResponse;
 import com.badminton.shop.ws_booking_sport.dto.response.DataResponse;
@@ -38,6 +39,20 @@ public class UserController {
     public ResponseEntity<DataResponse> me(HttpServletRequest request) {
         MeResponse resp = userService.me(request.getHeader("Authorization"));
         DataResponse body = DataResponse.success(resp, "Me fetched", HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    @PatchMapping("/me/avatar")
+    public ResponseEntity<DataResponse> updateAvatar(@RequestBody UpdateAvatarRequest req, HttpServletRequest request) {
+        String resp = userService.updateAvatar(request.getHeader("Authorization"), req.getAvatarUrl());
+        DataResponse body = DataResponse.success(null, resp, HttpStatus.OK.value());
+        return ResponseEntity.ok(body);
+    }
+
+    @DeleteMapping("/me/avatar")
+    public ResponseEntity<DataResponse> deleteAvatar(HttpServletRequest request) {
+        String resp = userService.deleteAvatar(request.getHeader("Authorization"));
+        DataResponse body = DataResponse.success(null, resp, HttpStatus.OK.value());
         return ResponseEntity.ok(body);
     }
 }

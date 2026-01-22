@@ -108,7 +108,11 @@ public class PaymentController {
         String vnp_SecureHash = vnPayConfig.hmacSHA512(hashData.toString());
 
         queryUrl += "&vnp_SecureHash=" + vnp_SecureHash;
-        String paymentUrl = vnPayConfig.getUrl() + "?" + queryUrl;
+        String baseUrl = vnPayConfig.getUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+        }
+        String paymentUrl = baseUrl + "?" + queryUrl;
 
         return ResponseEntity.ok(DataResponse.success(paymentUrl, "URL created", HttpStatus.OK.value()));
     }

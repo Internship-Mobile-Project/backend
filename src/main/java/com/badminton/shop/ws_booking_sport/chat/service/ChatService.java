@@ -10,11 +10,15 @@ import com.badminton.shop.ws_booking_sport.enums.ChatStatus;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -104,7 +108,13 @@ public class ChatService {
 
     @Transactional(readOnly = true)
     public List<MessageResponse> listMessages(String chatRoomId) {
-        List<Message> msgs = messageRepository.findByChatRoomIdOrderBySentAtAsc(chatRoomId);
+        // User requested at least 10 messages. We fetch latest 50 to provide good context.
+        Pageable pageable = PageRequest.of(0, 50, Sort.by(Sort.Direction.DESC, "sentAt"));
+        List<Message> msgs = messageRepository.findByChatRoomId(chatRoomId, pageable);
+
+        // Reverse from Newest->Oldest to Oldest->Newest for display
+        Collections.reverse(msgs);
+
         return msgs.stream().map(this::toMessageResponse).collect(Collectors.toList());
     }
 
@@ -136,9 +146,12 @@ public class ChatService {
                 dto.setMessages(List.of());
             }
         } else {
-            // Fetch all messages (for chat details)
-            // Note: room.getMessages() might be lazy, but here we likely want all or we use repository
-            List<Message> msgs = messageRepository.findByChatRoomIdOrderBySentAtAsc(room.getId());
+            // Fetch latest 50 messages for detail view as well
+            Pageable pageable = PageRequest.of(0, 50, Sort.by(Sort.Direction.DESC, "sentAt"));
+            List<Message> msgs = messageRepository.findByChatRoomId(room.getId(), pageable);
+             // Reverse to chronological order
+            Collections.reverse(msgs);
+
             if (msgs != null) {
                 dto.setMessages(msgs.stream().map(this::toMessageResponse).collect(Collectors.toList()));
             } else {

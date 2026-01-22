@@ -20,9 +20,15 @@ import com.badminton.shop.ws_booking_sport.model.core.User;
 import com.badminton.shop.ws_booking_sport.model.venue.Field;
 import com.badminton.shop.ws_booking_sport.model.venue.Slot;
 import com.badminton.shop.ws_booking_sport.venue.repository.FieldRepository;
+import com.badminton.shop.ws_booking_sport.notification.service.NotificationService;
+import com.badminton.shop.ws_booking_sport.enums.NotificationType;
+import com.badminton.shop.ws_booking_sport.enums.RecipientType;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +52,7 @@ public class BookingService {
     private final CustomerRepository customerRepository;
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public Booking createBooking(BookingRequest req) {
@@ -86,6 +93,27 @@ public class BookingService {
         }
 
         return createBookingWithCustomer(req, customer);
+    }
+
+    // New: initiate online payment (returns redirect url)
+    @Transactional
+    public String initiateOnlinePayment(String bookingId, Integer userId) {
+        Booking booking = bookingRepository.findById(bookingId).orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+        if (booking.getCustomer() == null || !booking.getCustomer().getId().equals(userId)) {
+            throw new IllegalArgumentException("Only the customer who created the booking can initiate its online payment");
+        }
+        if (!(booking.getPayment() instanceof OnlinePayment)) {
+            throw new IllegalArgumentException("Payment for this booking is not an online payment");
+        }
+        OnlinePayment op = (OnlinePayment) booking.getPayment();
+        return op.getRedirectUrl();
+    }
+
+    // New: get booking history for a user
+    public Page<BookingResponse> getBookingHistory(Integer userId, int page, int size) {
+        Pageable p = PageRequest.of(page, size);
+        Page<Booking> bookings = bookingRepository.findByCustomerIdOrderByCreatedAtDesc(userId, p);
+        return bookings.map(this::toBookingResponse);
     }
 
     // internal: booking flow when customer is already resolved
@@ -183,23 +211,32 @@ public class BookingService {
                 op.setBooking(booking);
                 booking.setPayment(op);
             }
+        } else {
+            // Default to CASH if not specified? Or throw error.
+            // Existing logic seems to imply optional payment.
         }
 
-        Booking saved = bookingRepository.save(booking);
+        Booking savedBooking = bookingRepository.save(booking);
 
-        // if online payment created we should replace placeholder bookingId in redirectUrl
-        if (saved.getPayment() instanceof OnlinePayment) {
-            OnlinePayment op = (OnlinePayment) saved.getPayment();
-            String redirect = op.getRedirectUrl();
-            if (redirect != null && redirect.contains("{bookingId}")) {
-                redirect = redirect.replace("{bookingId}", saved.getId());
-                op.setRedirectUrl(redirect);
-                // save updated payment
-                bookingRepository.save(saved);
-            }
+        // Notify user about successful booking
+        try {
+            String message = "Bạn đã đặt sân " + field.getName() + " tại " +
+                             (field.getVenue() != null ? field.getVenue().getName() : "Sân cầu lông") +
+                             " thành công. Mã đặt sân: " + savedBooking.getId();
+            notificationService.createNotification(
+                    String.valueOf(customer.getId()),
+                    RecipientType.USER,
+                    NotificationType.BOOKING,
+                    "Đặt sân thành công",
+                    message,
+                    "BOOKING",
+                    savedBooking.getId()
+            );
+        } catch (Exception e) {
+            log.error("Failed to create notification for booking: {}", savedBooking.getId(), e);
         }
 
-        return saved;
+        return savedBooking;
     }
 
     // keep existing helper for backward compatible path
@@ -302,19 +339,5 @@ public class BookingService {
         }
         booking.setUpdatedAt(LocalDateTime.now());
         return bookingRepository.save(booking);
-    }
-
-    // Customer initiates online payment (returns redirect url)
-    @Transactional(readOnly = true)
-    public String initiateOnlinePayment(String bookingId, Integer customerId) {
-        Booking booking = bookingRepository.findById(bookingId).orElseThrow(() -> new IllegalArgumentException("Booking not found"));
-        if (booking.getCustomer() == null || !booking.getCustomer().getId().equals(customerId)) {
-            throw new IllegalArgumentException("Only the customer who created the booking can initiate its online payment");
-        }
-        if (!(booking.getPayment() instanceof OnlinePayment)) {
-            throw new IllegalArgumentException("Payment for this booking is not an online payment");
-        }
-        OnlinePayment op = (OnlinePayment) booking.getPayment();
-        return op.getRedirectUrl();
     }
 }

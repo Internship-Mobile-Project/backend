@@ -16,6 +16,9 @@ public interface ReviewRepository extends JpaRepository<Review, String> {
     // find latest top 5 reviews for a venue (via booking -> slot -> field -> venue relationship)
     List<Review> findTop5ByBookingFieldVenueIdOrderByCreatedAtDesc(Integer venueId);
 
+    // paginated query for reviews of a venue, calling specific ordered method
+    Page<Review> findByBookingFieldVenueIdOrderByCreatedAtDesc(Integer venueId, Pageable pageable);
+
     // paginated query for reviews of a venue
     Page<Review> findByBookingFieldVenueId(Integer venueId, Pageable pageable);
 }

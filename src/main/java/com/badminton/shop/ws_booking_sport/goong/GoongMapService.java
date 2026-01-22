@@ -42,7 +42,7 @@ public class GoongMapService {
      * @param address: Địa chỉ đầy đủ (vd: "123 Đường A, Quận B, TP.HCM")
      * @return Location object chứa lat, lng hoặc null nếu không tìm thấy
      */
-    public GoongResponse.Location getGeoLocation(String address) {
+    public GoongResponse.GoongLocation getGeoLocation(String address) {
         try {
             // SỬA QUAN TRỌNG: Tạo URI object để tránh lỗi double encoding tiếng Việt
             String unsignedAddress = removeAccent(address);
@@ -69,7 +69,7 @@ public class GoongMapService {
                         && response.getResults() != null
                         && !response.getResults().isEmpty()) {
 
-                    GoongResponse.Location loc = response.getResults().get(0).getGeometry().getLocation();
+                    GoongResponse.GoongLocation loc = response.getResults().get(0).getGeometry().getLocation();
                     logger.info(">>> SUCCESS: Coordinates lat={}, lng={}", loc.getLat(), loc.getLng());
                     return loc;
                 }

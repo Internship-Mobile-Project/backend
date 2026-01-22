@@ -22,6 +22,10 @@ import com.badminton.shop.ws_booking_sport.enums.Role;
 import com.badminton.shop.ws_booking_sport.booking.repository.ReviewRepository;
 import com.badminton.shop.ws_booking_sport.dto.response.ReviewResponse;
 import com.badminton.shop.ws_booking_sport.model.booking.Review;
+import com.badminton.shop.ws_booking_sport.model.action.Favorite;
+import com.badminton.shop.ws_booking_sport.venue.repository.FavoriteRepository;
+import com.badminton.shop.ws_booking_sport.model.core.User;
+import com.badminton.shop.ws_booking_sport.core.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -46,6 +50,8 @@ public class VenueService {
     private final ReviewRepository reviewRepository;
     private final FieldService fieldService;
     private final FacilityService facilityService;
+    private final FavoriteRepository favoriteRepository; // Injection
+    private final UserRepository userRepository; // Injection
 
     private Account validateOwner(String authorizationHeader) {
         if (authorizationHeader == null || authorizationHeader.isBlank()) {
@@ -72,6 +78,11 @@ public class VenueService {
         }
 
         return account;
+    }
+
+    public List<VenueResponse> getVenuesBySport(String sport) {
+        List<Venue> venues = venueRepository.findBySportContainingIgnoreCase(sport);
+        return venues.stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     @Transactional
@@ -104,7 +115,7 @@ public class VenueService {
         if (addrReq != null) {
             Address address = new Address(addrReq);
             try {
-                GoongResponse.Location loc = goongMapService.getGeoLocation(addrReq.formatAddress());
+                GoongResponse.GoongLocation loc = goongMapService.getGeoLocation(addrReq.formatAddress());
                 if (loc != null) {
                     // convert float -> Double
                     address.setLatitude(Double.valueOf(loc.getLat()));
@@ -244,7 +255,7 @@ public class VenueService {
                 if (addrReq.getProvince() != null) a.setProvince(addrReq.getProvince());
             }
             try {
-                GoongResponse.Location loc = goongMapService.getGeoLocation(addrReq.formatAddress());
+                GoongResponse.GoongLocation loc = goongMapService.getGeoLocation(addrReq.formatAddress());
                 if (loc != null) {
                     v.getAddress().setLatitude(Double.valueOf(loc.getLat()));
                     v.getAddress().setLongitude(Double.valueOf(loc.getLng()));
@@ -334,31 +345,50 @@ public class VenueService {
 
     // new: get latest 5 reviews for a venue
     public List<ReviewResponse> getLatestReviews(Integer venueId) {
-        List<Review> reviews = reviewRepository.findTop5ByBookingFieldVenueIdOrderByCreatedAtDesc(venueId);
-        return reviews.stream().map(this::mapReview).collect(Collectors.toList());
+        Pageable p = PageRequest.of(0, 5);
+        // Correcting the method call to the one that exists in Repository
+        Page<Review> reviews = reviewRepository.findByBookingFieldVenueIdOrderByCreatedAtDesc(venueId, p);
+        return reviews.getContent().stream().map(ReviewResponse::fromEntity).collect(Collectors.toList());
     }
 
-    // new: get paginated reviews for a venue
-    public org.springframework.data.domain.Page<ReviewResponse> getReviewsPaginated(Integer venueId, int page, int size) {
-        Pageable p = PageRequest.of(Math.max(0, page), Math.max(1, size));
-        Page<Review> pr = reviewRepository.findByBookingFieldVenueId(venueId, p);
-        return pr.map(this::mapReview);
+    public Page<ReviewResponse> getReviewsPaginated(Integer venueId, int page, int size) {
+        Pageable p = PageRequest.of(page, size);
+        return reviewRepository.findByBookingFieldVenueIdOrderByCreatedAtDesc(venueId, p).map(ReviewResponse::fromEntity);
     }
 
-    private ReviewResponse mapReview(Review r) {
-        if (r == null) return null;
-        ReviewResponse resp = new ReviewResponse();
-        resp.setId(r.getId());
-        resp.setBookingId(r.getBooking() != null ? r.getBooking().getId() : null);
-        resp.setCustomerId(r.getCustomer() != null ? r.getCustomer().getId() : null);
-        resp.setCustomerName(r.getCustomer() != null ? r.getCustomer().getName() : null);
-        resp.setRating(r.getRating());
-        resp.setComment(r.getComment());
-        resp.setPhotos(r.getPhotos());
-        resp.setCreatedAt(r.getCreatedAt());
-        resp.setUpdatedAt(r.getUpdatedAt());
-        return resp;
+    @Transactional
+    public void addFavorite(Integer userId, Integer venueId) {
+        if (!userRepository.existsById(userId)) {
+            throw new IllegalArgumentException("User not found");
+        }
+        if (!venueRepository.existsById(venueId)) {
+            throw new IllegalArgumentException("Venue not found");
+        }
+        if (favoriteRepository.findByUserIdAndVenueId(userId, venueId).isPresent()) {
+            throw new IllegalArgumentException("Venue already in favorites");
+        }
+        Favorite fav = new Favorite();
+        fav.setUser(userRepository.getReferenceById(userId)); // proxy is efficient
+        fav.setVenue(venueRepository.getReferenceById(venueId));
+        fav.setCreatedAt(LocalDateTime.now());
+        favoriteRepository.save(fav);
     }
+
+    @Transactional
+    public void removeFavorite(Integer userId, Integer venueId) {
+        if (!favoriteRepository.findByUserIdAndVenueId(userId, venueId).isPresent()) {
+            throw new IllegalArgumentException("Favorite does not exist");
+        }
+        favoriteRepository.deleteByUserIdAndVenueId(userId, venueId);
+    }
+
+    public List<VenueResponse> getFavoriteVenues(Integer userId) {
+        List<Favorite> favs = favoriteRepository.findByUserId(userId);
+        return favs.stream()
+                .map(f -> toResponse(f.getVenue())) // Use existing toResponse method
+                .collect(Collectors.toList());
+    }
+
 
     private VenueResponse toResponse(Venue v) {
         VenueResponse resp = new VenueResponse();
